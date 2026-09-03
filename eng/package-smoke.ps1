@@ -9,7 +9,7 @@ $installerOutput = Join-Path $repositoryRoot 'artifacts\installer-smoke'
 $innoCompilerPath = Resolve-InnoCompiler
 
 if ([string]::IsNullOrWhiteSpace($innoCompilerPath)) {
-    throw 'Inno Setup 6 compiler (ISCC.exe) was not found. Run eng/verify-tools.ps1 for setup guidance.'
+    throw 'Inno Setup 6.3 or newer (ISCC.exe) was not found. Run eng/verify-tools.ps1 for setup guidance.'
 }
 
 New-Item -ItemType Directory -Force -Path $installerOutput | Out-Null

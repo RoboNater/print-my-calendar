@@ -1,5 +1,7 @@
 [CmdletBinding()]
-param()
+param(
+    [switch]$BuildToolsOnly
+)
 
 $ErrorActionPreference = 'Stop'
 $toolFailures = [System.Collections.Generic.List[string]]::new()
@@ -19,18 +21,7 @@ function Require-Command {
 }
 
 $gitCommand = Require-Command -Name git
-$githubCliCommand = Require-Command -Name gh
 $dotnetCommand = Require-Command -Name dotnet
-
-if ($null -ne $githubCliCommand) {
-    & $githubCliCommand.Source auth token *> $null
-    if ($LASTEXITCODE -ne 0) {
-        $toolFailures.Add("GitHub CLI is not authenticated. Run 'gh auth login'.")
-    }
-    else {
-        Write-Host '[ok] GitHub CLI is authenticated.'
-    }
-}
 
 if ($null -ne $dotnetCommand) {
     $dotnetSdks = & $dotnetCommand.Source --list-sdks
@@ -60,43 +51,57 @@ if ($null -ne $dotnetCommand) {
     }
 }
 
-$innoCompilerPath = Resolve-InnoCompiler
-if ([string]::IsNullOrWhiteSpace($innoCompilerPath)) {
-    $toolFailures.Add('Inno Setup 6 compiler (ISCC.exe) was not found.')
-}
-else {
-    Write-Host "[ok] Inno Setup compiler -> $innoCompilerPath"
-}
+if (-not $BuildToolsOnly) {
+    $githubCliCommand = Require-Command -Name gh
+    if ($null -ne $githubCliCommand) {
+        & $githubCliCommand.Source auth token *> $null
+        if ($LASTEXITCODE -ne 0) {
+            $toolFailures.Add("GitHub CLI is not authenticated. Run 'gh auth login'.")
+        }
+        else {
+            Write-Host '[delivery] GitHub CLI is authenticated.'
+        }
+    }
 
-$signToolPath = Get-ChildItem -Path 'C:\Program Files (x86)\Windows Kits\10\bin' -Filter signtool.exe -Recurse -ErrorAction SilentlyContinue |
-    Where-Object FullName -Match '\\x64\\signtool\.exe$' |
-    Sort-Object FullName -Descending |
-    Select-Object -First 1 -ExpandProperty FullName
-if ($null -eq $signToolPath) {
-    Write-Warning 'Optional Authenticode tool signtool.exe was not found.'
-}
-else {
-    Write-Host "[optional] Authenticode signing tool -> $signToolPath"
-}
+    $innoCompilerPath = Resolve-InnoCompiler
+    if ([string]::IsNullOrWhiteSpace($innoCompilerPath)) {
+        $toolFailures.Add("Inno Setup $script:MinimumInnoSetupVersion or newer was not found.")
+    }
+    else {
+        $innoCompilerVersion = Get-InnoCompilerVersion -CompilerPath $innoCompilerPath
+        Write-Host "[packaging] Inno Setup $innoCompilerVersion -> $innoCompilerPath"
+    }
 
-$visualStudioPath = $null
-$visualStudioLocator = 'C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe'
-if (Test-Path -LiteralPath $visualStudioLocator) {
-    $visualStudioPath = & $visualStudioLocator -latest -products * -property installationPath
-}
-if ([string]::IsNullOrWhiteSpace($visualStudioPath)) {
-    Write-Host '[optional] Visual Studio is not installed; the supported .NET CLI build remains available.'
-}
-else {
-    Write-Host "[optional] Visual Studio -> $visualStudioPath"
-}
+    $signToolPath = Get-ChildItem -Path 'C:\Program Files (x86)\Windows Kits\10\bin' -Filter signtool.exe -Recurse -ErrorAction SilentlyContinue |
+        Where-Object FullName -Match '\\x64\\signtool\.exe$' |
+        Sort-Object FullName -Descending |
+        Select-Object -First 1 -ExpandProperty FullName
+    if ($null -eq $signToolPath) {
+        Write-Warning 'Optional Authenticode tool signtool.exe was not found.'
+    }
+    else {
+        Write-Host "[optional] Authenticode signing tool -> $signToolPath"
+    }
 
-$configuredPrinters = @(Get-Printer -ErrorAction SilentlyContinue)
-if ($configuredPrinters.Count -eq 0) {
-    Write-Warning 'No printer is configured. Add a physical or PDF printer before Phase 4 manual acceptance.'
-}
-else {
-    Write-Host "[manual] Configured printers -> $($configuredPrinters.Name -join ', ')"
+    $visualStudioPath = $null
+    $visualStudioLocator = 'C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe'
+    if (Test-Path -LiteralPath $visualStudioLocator) {
+        $visualStudioPath = & $visualStudioLocator -latest -products * -property installationPath
+    }
+    if ([string]::IsNullOrWhiteSpace($visualStudioPath)) {
+        Write-Host '[optional] Visual Studio is not installed; the supported .NET CLI build remains available.'
+    }
+    else {
+        Write-Host "[optional] Visual Studio -> $visualStudioPath"
+    }
+
+    $configuredPrinters = @(Get-Printer -ErrorAction SilentlyContinue)
+    if ($configuredPrinters.Count -eq 0) {
+        Write-Warning 'No printer is configured. Add a physical or PDF printer before Phase 4 manual acceptance.'
+    }
+    else {
+        Write-Host "[manual] Configured printers -> $($configuredPrinters.Name -join ', ')"
+    }
 }
 
 if ($toolFailures.Count -gt 0) {
@@ -104,4 +109,9 @@ if ($toolFailures.Count -gt 0) {
     exit 1
 }
 
-Write-Host 'Required Phase 1 tools are available.'
+if ($BuildToolsOnly) {
+    Write-Host 'Required build tools are available.'
+}
+else {
+    Write-Host 'Required Phase 1 build, PR-delivery, and packaging tools are available.'
+}

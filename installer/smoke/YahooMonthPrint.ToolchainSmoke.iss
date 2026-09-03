@@ -2,6 +2,7 @@
 AppId={{12C74888-03E8-4A38-8177-EA74C892FE65}
 AppName=Yahoo Month Print Toolchain Smoke
 AppVersion=0.0.0
+; Inno Setup requires this directive even though this compiler-only probe creates no app directory.
 DefaultDirName={localappdata}\Programs\YahooMonthPrintToolchainSmoke
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible

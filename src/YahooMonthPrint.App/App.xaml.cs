@@ -9,6 +9,7 @@ public partial class App : Application
         base.OnStartup(e);
 
         MainWindow = CreateMainWindow();
+        // This internal flag lets build validation exercise XAML startup without displaying a window.
         if (e.Args.Contains("--smoke-test", StringComparer.Ordinal))
         {
             MainWindow.Dispatcher.InvokeAsync(() => Shutdown(0));

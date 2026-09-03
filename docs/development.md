@@ -8,12 +8,12 @@ The repository's `global.json` pins the supported .NET 8 SDK feature band. `Dire
 
 ## Required tools
 
-Install these tools for development and PR delivery:
+Install these tools for local builds:
 
 - Git;
-- GitHub CLI (`gh`);
-- .NET 8 SDK, including the Windows Desktop targeting pack supplied by the SDK installer;
-- Inno Setup 6, including its command-line compiler `ISCC.exe`.
+- .NET 8 SDK, including the Windows Desktop targeting pack supplied by the SDK installer.
+
+PR delivery additionally uses an authenticated GitHub CLI (`gh`). Installer work requires Inno Setup 6.3 or newer, including its command-line compiler `ISCC.exe`.
 
 Example current-user installs from a PowerShell prompt are:
 
@@ -37,9 +37,10 @@ From the repository root:
 
 ```powershell
 ./eng/verify-tools.ps1
+./eng/verify-tools.ps1 -BuildToolsOnly
 ```
 
-The script fails when a required build/PR/package tool is absent. It reports signing tools, printers, and Visual Studio as optional/manual capabilities.
+The default check validates required build, PR-delivery, and packaging tools and reports signing tools, printers, and Visual Studio as optional/manual capabilities. `-BuildToolsOnly` checks just Git, the selected .NET SDK, and Windows Desktop support; CI runs this mode so the documented entry point cannot silently rot.
 
 ## Restore, build, test, and publish
 
@@ -65,7 +66,7 @@ dotnet run --project src/YahooMonthPrint.App/YahooMonthPrint.App.csproj --config
 ./eng/verify-self-contained.ps1
 ```
 
-The `--smoke-test` option constructs the WPF shell, validates XAML/application startup, and exits without showing a persistent window. `verify-self-contained.ps1` additionally points `DOTNET_ROOT` at a deliberately absent directory, disables machine-wide runtime lookup, and checks the .NET host trace for the bundled runtime, hostfxr, and hostpolicy. The Phase 1 shell only confirms that WPF startup and project composition work. Calendar behavior begins in Phase 2.
+The `--smoke-test` option constructs the WPF shell, validates XAML/application startup, and exits without showing a persistent window. `verify-self-contained.ps1` additionally points the x64 and general `DOTNET_ROOT` variables at a deliberately absent directory, disables machine-wide runtime lookup, and requires a successful exit. It captures the .NET host trace as supplemental diagnostic evidence, but trace wording changes do not fail the build. The Phase 1 shell only confirms that WPF startup and project composition work. Calendar behavior begins in Phase 2.
 
 ## Optional dependency checks
 

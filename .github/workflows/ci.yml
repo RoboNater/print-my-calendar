@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-test-publish:
     runs-on: windows-latest
@@ -24,6 +28,10 @@ jobs:
           cache: true
           cache-dependency-path: '**/packages.lock.json'
 
+      - name: Verify required build tools
+        shell: pwsh
+        run: ./eng/verify-tools.ps1 -BuildToolsOnly
+
       - name: Restore locked dependencies
         run: dotnet restore YahooMonthPrint.sln --locked-mode
 
@@ -36,7 +44,8 @@ jobs:
       - name: Test with coverage
         run: dotnet test YahooMonthPrint.sln --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory artifacts/test-results
 
-      - name: Check dependency vulnerabilities
+      # Restore enforces NU1901-NU1904 as errors; this step provides a readable report.
+      - name: Report dependency vulnerabilities
         run: dotnet list YahooMonthPrint.sln package --vulnerable --include-transitive
 
       - name: Publish self-contained application
@@ -58,7 +67,17 @@ jobs:
         with:
           name: phase-1-validation
           path: |
-            artifacts/publish/win-x64/
             artifacts/installer-smoke/
+            artifacts/self-contained-validation/
             artifacts/test-results/
           if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload self-contained application from main
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: self-contained-win-x64
+          path: artifacts/publish/win-x64/
+          if-no-files-found: error
+          retention-days: 7

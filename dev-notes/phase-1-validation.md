@@ -14,7 +14,7 @@ Environment: Windows x64, standard project checkout
 
 Visual Studio is not installed. It is intentionally optional because the supported .NET CLI workflow completed every compile/test/publish gate.
 
-No printer is currently configured. The print spooler is running, but enabling the Windows Microsoft Print to PDF feature requires an elevated Windows session that is not available to this development task. This does not block Phase 1; a physical or PDF printer remains a Phase 4 manual-acceptance prerequisite.
+No printer is configured on the primary implementation machine. The print spooler is running, but enabling the Windows Microsoft Print to PDF feature requires an elevated Windows session that is not available to this development task. An independent reproduction reviewer reported Microsoft Print to PDF on the second validation machine. Printer availability is machine-specific and does not block Phase 1; a physical or PDF printer remains a Phase 4 manual-acceptance prerequisite for whichever machine runs that phase.
 
 ## Successful checks
 
@@ -22,14 +22,14 @@ No printer is currently configured. The print spooler is running, but enabling t
 - locked solution restore using committed package lock files;
 - `dotnet format --verify-no-changes`;
 - Release solution build with zero warnings and zero errors;
-- three xUnit v3 smoke tests with Coverlet collection;
+- four xUnit v3 smoke tests with Coverlet collection, including exact production project-edge and Core metadata boundary checks;
 - Ical.Net 5.2.3 parsing of timezone, weekly recurrence, and EXDATE data;
 - WPF `FixedDocument` creation on an STA thread;
 - NuGet outdated-package check: no updates reported;
 - NuGet direct/transitive vulnerability check: no vulnerable packages reported;
 - self-contained `win-x64` single-file publish;
 - published WPF executable startup using `--smoke-test`, exit code 0;
-- host-resolution trace proof that the single-file application uses its internal hostfxr, hostpolicy, and runtime while `DOTNET_ROOT` points to a nonexistent directory and machine-wide runtime lookup is disabled;
+- self-contained startup validation with both x64 and general `DOTNET_ROOT` variables pointed to a nonexistent directory and machine-wide runtime lookup disabled, plus a supplemental host-resolution trace;
 - Inno Setup compilation of the lowest-privilege toolchain-smoke installer; and
 - `git diff --check`.
 
