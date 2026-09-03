@@ -15,10 +15,10 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install .NET SDK
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
           global-json-file: global.json
           cache: true
@@ -39,9 +39,6 @@ jobs:
       - name: Check dependency vulnerabilities
         run: dotnet list YahooMonthPrint.sln package --vulnerable --include-transitive
 
-      - name: Restore Windows publish assets
-        run: dotnet restore src/YahooMonthPrint.App/YahooMonthPrint.App.csproj --runtime win-x64 --locked-mode --force-evaluate
-
       - name: Publish self-contained application
         run: dotnet publish src/YahooMonthPrint.App/YahooMonthPrint.App.csproj --configuration Release --runtime win-x64 --self-contained true --no-restore --output artifacts/publish/win-x64 -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
 
@@ -49,14 +46,14 @@ jobs:
         run: ./artifacts/publish/win-x64/YahooMonthPrint.App.exe --smoke-test
 
       - name: Install Inno Setup
-        run: choco install innosetup --yes --no-progress
+        run: choco install innosetup --version=6.7.1 --yes --no-progress
 
       - name: Compile installer toolchain smoke test
         shell: pwsh
         run: ./eng/package-smoke.ps1
 
       - name: Upload validation artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: phase-1-validation
           path: |

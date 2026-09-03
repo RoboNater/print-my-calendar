@@ -22,6 +22,7 @@ winget install --id Git.Git --exact
 winget install --id GitHub.cli --exact
 winget install --id Microsoft.DotNet.SDK.8 --exact
 winget install --id JRSoftware.InnoSetup --exact --scope user
+gh auth login
 ```
 
 Visual Studio 2022 Community or Build Tools with the “.NET desktop development” workload is optional. The repository uses the .NET CLI as the canonical build path so a full IDE is not a build prerequisite.
@@ -47,7 +48,6 @@ dotnet restore YahooMonthPrint.sln
 dotnet format YahooMonthPrint.sln --verify-no-changes --no-restore
 dotnet build YahooMonthPrint.sln --configuration Release --no-restore
 dotnet test YahooMonthPrint.sln --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory artifacts/test-results
-dotnet restore src/YahooMonthPrint.App/YahooMonthPrint.App.csproj --runtime win-x64 --force-evaluate
 dotnet publish src/YahooMonthPrint.App/YahooMonthPrint.App.csproj --configuration Release --runtime win-x64 --self-contained true --no-restore --output artifacts/publish/win-x64 -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
 ./eng/package-smoke.ps1
 ```

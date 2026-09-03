@@ -3,21 +3,7 @@ param()
 
 $ErrorActionPreference = 'Stop'
 $toolFailures = [System.Collections.Generic.List[string]]::new()
-
-function Find-InnoCompiler {
-    $innoCommand = Get-Command ISCC.exe -ErrorAction SilentlyContinue
-    if ($null -ne $innoCommand) {
-        return $innoCommand.Source
-    }
-
-    $innoCandidates = @(
-        (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe'),
-        'C:\Program Files (x86)\Inno Setup 6\ISCC.exe',
-        'C:\Program Files\Inno Setup 6\ISCC.exe'
-    )
-
-    return $innoCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
-}
+. (Join-Path $PSScriptRoot 'InnoSetup.ps1')
 
 function Require-Command {
     param([Parameter(Mandatory)][string]$Name)
@@ -25,43 +11,56 @@ function Require-Command {
     $requiredCommand = Get-Command $Name -ErrorAction SilentlyContinue
     if ($null -eq $requiredCommand) {
         $toolFailures.Add("Required command '$Name' was not found.")
-        return
+        return $null
     }
 
     Write-Host "[ok] $Name -> $($requiredCommand.Source)"
+    return $requiredCommand
 }
 
-Require-Command -Name git
-Require-Command -Name gh
-Require-Command -Name dotnet
+$gitCommand = Require-Command -Name git
+$githubCliCommand = Require-Command -Name gh
+$dotnetCommand = Require-Command -Name dotnet
 
-$dotnetSdks = & dotnet --list-sdks
-$dotnetSdkText = $dotnetSdks -join "`n"
-if ($dotnetSdkText -notmatch '(?m)^8\.0\.') {
-    $toolFailures.Add('A .NET 8 SDK was not found.')
-}
-else {
-    Write-Host "[ok] .NET 8 SDK -> $($dotnetSdks -join ', ')"
-}
-
-$selectedDotnetSdk = & dotnet --version
-if ($selectedDotnetSdk -notmatch '^8\.0\.4\d{2}$') {
-    $toolFailures.Add("global.json did not select a compatible .NET 8.0.4xx SDK (selected: $selectedDotnetSdk).")
-}
-else {
-    Write-Host "[ok] global.json selected SDK -> $selectedDotnetSdk"
+if ($null -ne $githubCliCommand) {
+    & $githubCliCommand.Source auth token *> $null
+    if ($LASTEXITCODE -ne 0) {
+        $toolFailures.Add("GitHub CLI is not authenticated. Run 'gh auth login'.")
+    }
+    else {
+        Write-Host '[ok] GitHub CLI is authenticated.'
+    }
 }
 
-$dotnetRuntimes = & dotnet --list-runtimes
-$dotnetRuntimeText = $dotnetRuntimes -join "`n"
-if ($dotnetRuntimeText -notmatch '(?m)^Microsoft\.WindowsDesktop\.App 8\.0\.') {
-    $toolFailures.Add('The .NET 8 Windows Desktop runtime/targeting support was not found.')
-}
-else {
-    Write-Host '[ok] .NET 8 Windows Desktop runtime is installed.'
+if ($null -ne $dotnetCommand) {
+    $dotnetSdks = & $dotnetCommand.Source --list-sdks
+    $dotnetSdkText = $dotnetSdks -join "`n"
+    if ($dotnetSdkText -notmatch '(?m)^8\.0\.') {
+        $toolFailures.Add('A .NET 8 SDK was not found.')
+    }
+    else {
+        Write-Host "[ok] .NET 8 SDK -> $($dotnetSdks -join ', ')"
+    }
+
+    $selectedDotnetSdk = & $dotnetCommand.Source --version
+    if ($selectedDotnetSdk -notmatch '^8\.0\.4\d{2}$') {
+        $toolFailures.Add("global.json did not select a compatible .NET 8.0.4xx SDK (selected: $selectedDotnetSdk).")
+    }
+    else {
+        Write-Host "[ok] global.json selected SDK -> $selectedDotnetSdk"
+    }
+
+    $dotnetRuntimes = & $dotnetCommand.Source --list-runtimes
+    $dotnetRuntimeText = $dotnetRuntimes -join "`n"
+    if ($dotnetRuntimeText -notmatch '(?m)^Microsoft\.WindowsDesktop\.App 8\.0\.') {
+        $toolFailures.Add('The .NET 8 Windows Desktop runtime/targeting support was not found.')
+    }
+    else {
+        Write-Host '[ok] .NET 8 Windows Desktop runtime is installed.'
+    }
 }
 
-$innoCompilerPath = Find-InnoCompiler
+$innoCompilerPath = Resolve-InnoCompiler
 if ([string]::IsNullOrWhiteSpace($innoCompilerPath)) {
     $toolFailures.Add('Inno Setup 6 compiler (ISCC.exe) was not found.')
 }

@@ -4,6 +4,10 @@
 **/obj/
 TestResults/
 artifacts/
+*.log
+*.dmp
+*.mdmp
+crash-reports/
 
 # User- and machine-specific files
 *.suo
