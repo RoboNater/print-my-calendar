@@ -1,0 +1,34 @@
+# Visual Studio and .NET build output
+.vs/
+**/bin/
+**/obj/
+TestResults/
+artifacts/
+
+# User- and machine-specific files
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+.env
+.env.*
+!.env.example
+appsettings.Local.json
+integration-test.local.*
+
+# Credentials and signing material
+*.pfx
+*.p12
+*.snk
+*.cer
+*.key
+
+# Generated installer output
+installer/**/Output/
+installer/**/output/
+
+# Common editor and OS files
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store

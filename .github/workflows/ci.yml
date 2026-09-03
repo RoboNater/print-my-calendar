@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-publish:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+
+      - name: Restore locked dependencies
+        run: dotnet restore YahooMonthPrint.sln --locked-mode
+
+      - name: Verify formatting
+        run: dotnet format YahooMonthPrint.sln --verify-no-changes --no-restore
+
+      - name: Build
+        run: dotnet build YahooMonthPrint.sln --configuration Release --no-restore
+
+      - name: Test with coverage
+        run: dotnet test YahooMonthPrint.sln --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory artifacts/test-results
+
+      - name: Check dependency vulnerabilities
+        run: dotnet list YahooMonthPrint.sln package --vulnerable --include-transitive
+
+      - name: Restore Windows publish assets
+        run: dotnet restore src/YahooMonthPrint.App/YahooMonthPrint.App.csproj --runtime win-x64 --locked-mode --force-evaluate
+
+      - name: Publish self-contained application
+        run: dotnet publish src/YahooMonthPrint.App/YahooMonthPrint.App.csproj --configuration Release --runtime win-x64 --self-contained true --no-restore --output artifacts/publish/win-x64 -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+
+      - name: Smoke-test published application startup
+        run: ./artifacts/publish/win-x64/YahooMonthPrint.App.exe --smoke-test
+
+      - name: Install Inno Setup
+        run: choco install innosetup --yes --no-progress
+
+      - name: Compile installer toolchain smoke test
+        shell: pwsh
+        run: ./eng/package-smoke.ps1
+
+      - name: Upload validation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase-1-validation
+          path: |
+            artifacts/publish/win-x64/
+            artifacts/installer-smoke/
+            artifacts/test-results/
+          if-no-files-found: error
