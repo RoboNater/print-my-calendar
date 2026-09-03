@@ -14,6 +14,6 @@ Versions reviewed on 2026-09-03:
 
 Built-in .NET analyzers are enabled at the .NET 8 recommended level; an additional analyzer package is intentionally unnecessary. NuGet auditing is enabled for direct and transitive dependencies. CI also emits a vulnerability check and fails on restore/build warnings.
 
-GitHub Actions are pinned to immutable commit SHAs, with the corresponding major version recorded in comments. The pinned v5 actions use the runner's supported Node.js 24 runtime. The CI packaging smoke test pins the reviewed Inno Setup Chocolatey package at 6.7.1 rather than following an unbounded latest version. Local development may use a newer compatible Inno Setup 6 patch; 6.7.3 was validated for this phase.
+GitHub Actions are pinned to immutable commit SHAs, with the corresponding major version recorded in comments. The pinned action releases use the runner's supported Node.js 24 runtime. The CI packaging smoke test pins the reviewed Inno Setup Chocolatey package at 6.7.1 rather than following an unbounded latest version. Local development may use a newer compatible Inno Setup 6 patch; 6.7.3 was validated for this phase.
 
 Package changes should be isolated in a reviewable PR. Re-check the package's official NuGet page/source repository, license, supported frameworks, release notes, vulnerabilities, and behavior-specific tests before merging.
