@@ -42,8 +42,9 @@ jobs:
       - name: Publish self-contained application
         run: dotnet publish src/YahooMonthPrint.App/YahooMonthPrint.App.csproj --configuration Release --runtime win-x64 --self-contained true --no-restore --output artifacts/publish/win-x64 -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
 
-      - name: Smoke-test published application startup
-        run: ./artifacts/publish/win-x64/YahooMonthPrint.App.exe --smoke-test
+      - name: Prove self-contained application startup
+        shell: pwsh
+        run: ./eng/verify-self-contained.ps1
 
       - name: Install Inno Setup
         run: choco install innosetup --version=6.7.1 --yes --no-progress

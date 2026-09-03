@@ -62,9 +62,10 @@ Launch either the normal Release build or the self-contained published executabl
 dotnet run --project src/YahooMonthPrint.App/YahooMonthPrint.App.csproj --configuration Release
 ./artifacts/publish/win-x64/YahooMonthPrint.App.exe
 ./artifacts/publish/win-x64/YahooMonthPrint.App.exe --smoke-test
+./eng/verify-self-contained.ps1
 ```
 
-The `--smoke-test` option constructs the WPF shell, validates XAML/application startup, and exits without showing a persistent window. The Phase 1 shell only confirms that WPF startup and project composition work. Calendar behavior begins in Phase 2.
+The `--smoke-test` option constructs the WPF shell, validates XAML/application startup, and exits without showing a persistent window. `verify-self-contained.ps1` additionally points `DOTNET_ROOT` at a deliberately absent directory, disables machine-wide runtime lookup, and checks the .NET host trace for the bundled runtime, hostfxr, and hostpolicy. The Phase 1 shell only confirms that WPF startup and project composition work. Calendar behavior begins in Phase 2.
 
 ## Optional dependency checks
 

@@ -29,6 +29,7 @@ No printer is currently configured. The print spooler is running, but enabling t
 - NuGet direct/transitive vulnerability check: no vulnerable packages reported;
 - self-contained `win-x64` single-file publish;
 - published WPF executable startup using `--smoke-test`, exit code 0;
+- host-resolution trace proof that the single-file application uses its internal hostfxr, hostpolicy, and runtime while `DOTNET_ROOT` points to a nonexistent directory and machine-wide runtime lookup is disabled;
 - Inno Setup compilation of the lowest-privilege toolchain-smoke installer; and
 - `git diff --check`.
 
