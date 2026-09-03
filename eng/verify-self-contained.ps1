@@ -64,7 +64,7 @@ $requiredEvidence = @(
 )
 
 foreach ($evidence in $requiredEvidence) {
-    if (-not $trace.Contains($evidence, [StringComparison]::Ordinal)) {
+    if ($trace.IndexOf($evidence, [StringComparison]::Ordinal) -lt 0) {
         throw "The .NET host trace did not contain required evidence: $evidence"
     }
 }
