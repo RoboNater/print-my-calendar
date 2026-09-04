@@ -9,7 +9,7 @@ public sealed class ArchitectureSmokeTests
     private static readonly string[] ForbiddenCoreNamespaceRoots = ["System.Net", "System.Windows"];
 
     [Fact]
-    public void ProductionProjectReferencesMatchAllowedGraph()
+    public void ProductionProjectDependenciesMatchAllowedGraph()
     {
         var repositoryRoot = FindRepositoryRoot();
         var sourceRoot = Path.Combine(repositoryRoot, "src");
@@ -27,6 +27,17 @@ public sealed class ArchitectureSmokeTests
             "src/YahooMonthPrint.YahooCalDav/YahooMonthPrint.YahooCalDav.csproj",
         ];
         Assert.Equal(expectedProjects, projectPaths);
+
+        var coreProjectPath = Path.Combine(
+            repositoryRoot,
+            "src/YahooMonthPrint.Core/YahooMonthPrint.Core.csproj");
+        var corePackageReferences = XDocument
+            .Load(coreProjectPath)
+            .Descendants()
+            .Where(element => element.Name.LocalName == "PackageReference")
+            .Select(element => element.Attribute("Include")?.Value)
+            .ToArray();
+        Assert.Empty(corePackageReferences);
 
         var actualEdges = projectPaths
             .SelectMany(projectPath => ReadProjectReferenceEdges(repositoryRoot, projectPath))

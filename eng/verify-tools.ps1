@@ -65,11 +65,20 @@ if (-not $BuildToolsOnly) {
 
     $innoCompilerPath = Resolve-InnoCompiler
     if ([string]::IsNullOrWhiteSpace($innoCompilerPath)) {
-        $toolFailures.Add("Inno Setup $script:MinimumInnoSetupVersion or newer was not found.")
+        $toolFailures.Add('Inno Setup 6 compiler (ISCC.exe) was not found.')
     }
     else {
-        $innoCompilerVersion = Get-InnoCompilerVersion -CompilerPath $innoCompilerPath
-        Write-Host "[packaging] Inno Setup $innoCompilerVersion -> $innoCompilerPath"
+        $installerScript = Join-Path (Split-Path -Parent $PSScriptRoot) 'installer\smoke\YahooMonthPrint.ToolchainSmoke.iss'
+        $compatibility = Test-InnoCompilerCompatibility `
+            -CompilerPath $innoCompilerPath `
+            -InstallerScript $installerScript
+        if (-not $compatibility.IsCompatible) {
+            $toolFailures.Add(
+                "Inno Setup is incompatible with the installer script. $($compatibility.Output)")
+        }
+        else {
+            Write-Host "[packaging] Inno Setup is compatible with the installer script -> $innoCompilerPath"
+        }
     }
 
     $signToolPath = Get-ChildItem -Path 'C:\Program Files (x86)\Windows Kits\10\bin' -Filter signtool.exe -Recurse -ErrorAction SilentlyContinue |

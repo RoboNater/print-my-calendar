@@ -58,16 +58,20 @@ if (-not (Test-Path -LiteralPath $tracePath -PathType Leaf)) {
 }
 
 $trace = Get-Content -LiteralPath $tracePath -Raw
-$requiredEvidence = @(
+$selfContainedEvidence = 'Executing as a self-contained app as per config file'
+if ($trace.IndexOf($selfContainedEvidence, [StringComparison]::Ordinal) -lt 0) {
+    throw 'The .NET host trace identifies this as framework-dependent; self-contained startup was not validated.'
+}
+
+$supplementalEvidence = @(
     'Detected Single-File app bundle',
     'Using internal fxr',
-    'Executing as a self-contained app as per config file',
     'Using internal hostpolicy',
     'DOTNET_MULTILEVEL_LOOKUP is set to 0',
     "Using dotnet root path [$resolvedPublishDirectory\]"
 )
 
-foreach ($evidence in $requiredEvidence) {
+foreach ($evidence in $supplementalEvidence) {
     if ($trace.IndexOf($evidence, [StringComparison]::Ordinal) -lt 0) {
         Write-Warning "The .NET host diagnostic wording changed or omitted: $evidence"
     }

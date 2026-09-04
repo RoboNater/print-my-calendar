@@ -22,7 +22,7 @@ No printer is configured on the primary implementation machine. The print spoole
 - locked solution restore using committed package lock files;
 - `dotnet format --verify-no-changes`;
 - Release solution build with zero warnings and zero errors;
-- four xUnit v3 smoke tests with Coverlet collection, including exact production project-edge and Core metadata boundary checks;
+- four xUnit v3 smoke tests with Coverlet collection, including exact production project/package-edge and Core metadata boundary checks;
 - Ical.Net 5.2.3 parsing of timezone, weekly recurrence, and EXDATE data;
 - WPF `FixedDocument` creation on an STA thread;
 - NuGet outdated-package check: no updates reported;
@@ -30,7 +30,9 @@ No printer is configured on the primary implementation machine. The print spoole
 - self-contained `win-x64` single-file publish;
 - published WPF executable startup using `--smoke-test`, exit code 0;
 - self-contained startup validation with both x64 and general `DOTNET_ROOT` variables pointed to a nonexistent directory and machine-wide runtime lookup disabled, plus a supplemental host-resolution trace;
-- Inno Setup compilation of the lowest-privilege toolchain-smoke installer; and
+- negative control proving that the same startup validator rejects a framework-dependent single-file publish;
+- Inno Setup compilation of the lowest-privilege toolchain-smoke installer;
+- negative control proving that the Inno preprocessor rejects a compiler below the installer script's declared version floor; and
 - `git diff --check`.
 
 The generated publish, coverage, and installer-smoke artifacts live under ignored `artifacts/` and are not committed.

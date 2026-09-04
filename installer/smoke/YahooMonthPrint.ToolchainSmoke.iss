@@ -1,3 +1,7 @@
+#if VER < EncodeVer(6, 3, 0)
+  #error Inno Setup 6.3 or newer is required by this script.
+#endif
+
 [Setup]
 AppId={{12C74888-03E8-4A38-8177-EA74C892FE65}
 AppName=Yahoo Month Print Toolchain Smoke

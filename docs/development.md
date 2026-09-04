@@ -66,7 +66,7 @@ dotnet run --project src/YahooMonthPrint.App/YahooMonthPrint.App.csproj --config
 ./eng/verify-self-contained.ps1
 ```
 
-The `--smoke-test` option constructs the WPF shell, validates XAML/application startup, and exits without showing a persistent window. `verify-self-contained.ps1` additionally points the x64 and general `DOTNET_ROOT` variables at a deliberately absent directory, disables machine-wide runtime lookup, and requires a successful exit. It captures the .NET host trace as supplemental diagnostic evidence, but trace wording changes do not fail the build. The Phase 1 shell only confirms that WPF startup and project composition work. Calendar behavior begins in Phase 2.
+The `--smoke-test` option constructs the WPF shell, validates XAML/application startup, and exits without showing a persistent window. `verify-self-contained.ps1` additionally points the x64 and general `DOTNET_ROOT` variables at a deliberately absent directory, disables machine-wide runtime lookup, requires a successful exit, and requires the host's semantic self-contained decision in its trace. Other trace wording is supplemental and does not fail the build. The Phase 1 shell only confirms that WPF startup and project composition work. Calendar behavior begins in Phase 2.
 
 ## Optional dependency checks
 
