@@ -13,7 +13,7 @@ public sealed class FakeCalendarOccurrenceSource : ICalendarOccurrenceSource
 
     public IReadOnlyList<CalendarSource> Calendars => Sources;
 
-    public async Task<IReadOnlyList<CalendarOccurrence>> LoadAsync(
+    public async Task<CalendarLoadResult> LoadAsync(
         MonthGridRange range,
         CancellationToken cancellationToken)
     {
@@ -23,7 +23,9 @@ public sealed class FakeCalendarOccurrenceSource : ICalendarOccurrenceSource
         var occurrences = new List<CalendarOccurrence>();
         AddWeeklyClasses(range, occurrences);
         AddMonthSpecificEvents(range.DisplayedMonth, occurrences);
-        return occurrences.Order(OccurrenceComparer.Instance).ToArray();
+        return new CalendarLoadResult(
+            occurrences.Order(OccurrenceComparer.Instance).ToArray(),
+            DateTimeOffset.Now);
     }
 
     private static void AddWeeklyClasses(

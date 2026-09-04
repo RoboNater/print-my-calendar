@@ -19,7 +19,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private DateOnly displayedMonth;
     private string filterText = string.Empty;
     private bool isLoading;
-    private string statusText = "Offline sample schedule";
+    private string statusText = "Calendar not loaded";
     private int loadVersion;
     private Task pendingFilterUpdate = Task.CompletedTask;
     private bool isBatchUpdatingTitleFilters;
@@ -217,6 +217,23 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public async Task NavigateAsync(int months) =>
         await NavigateToAsync(displayedMonth.AddMonths(months));
 
+    public async Task InitializeAsync()
+    {
+        ThrowIfDisposed();
+        if (source is ICachedCalendarOccurrenceSource cachedSource)
+        {
+            var range = MonthGrid.Create(displayedMonth.Year, displayedMonth.Month);
+            var cached = await cachedSource.TryLoadCachedAsync(range, CancellationToken.None);
+            if (cached is not null)
+            {
+                ApplyLoadResult(cached, range);
+                StatusText = $"Showing cached Yahoo data from {cached.RefreshedAt.LocalDateTime:g}; refreshing…";
+            }
+        }
+
+        await RefreshAsync();
+    }
+
     public async Task RefreshAsync()
     {
         ThrowIfDisposed();
@@ -227,22 +244,21 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         var version = ++loadVersion;
 
         IsLoading = true;
-        StatusText = "Loading sample schedule…";
+        StatusText = source is FakeCalendarOccurrenceSource
+            ? "Loading sample schedule…"
+            : "Refreshing Yahoo Calendar…";
         try
         {
             var range = MonthGrid.Create(displayedMonth.Year, displayedMonth.Month);
-            var occurrences = await source.LoadAsync(range, cancellationToken);
+            var result = await source.LoadAsync(range, cancellationToken);
             if (version != loadVersion)
             {
                 return;
             }
 
-            occurrenceSet = new MonthOccurrenceSet(occurrences);
-            SynchronizeHiddenOccurrenceDetails(occurrences, range);
-            BuildTitleFilters();
-            ApplyVisibility();
+            ApplyLoadResult(result, range);
             SetLastTechnicalError(null);
-            StatusText = $"Sample schedule loaded at {DateTime.Now:t}";
+            StatusText = BuildSuccessStatus(result);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -252,14 +268,14 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             ReportLoadErrorIfCurrent(
                 version,
                 exception,
-                $"Sample schedule unavailable: {exception.Message}");
+                BuildFailureStatus(exception));
         }
         catch (Exception exception) when (IsRecoverable(exception))
         {
             ReportLoadErrorIfCurrent(
                 version,
                 exception,
-                "The sample schedule could not be loaded because of an unexpected error. Try again.");
+                "The calendar could not be loaded because of an unexpected error. Try again.");
         }
         finally
         {
@@ -306,6 +322,38 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
+    private void ApplyLoadResult(CalendarLoadResult result, MonthGridRange range)
+    {
+        SynchronizeCalendarMetadata();
+        occurrenceSet = new MonthOccurrenceSet(result.Occurrences);
+        SynchronizeHiddenOccurrenceDetails(result.Occurrences, range);
+        BuildTitleFilters();
+        ApplyVisibility();
+    }
+
+    private void SynchronizeCalendarMetadata()
+    {
+        var currentIds = calendarLookup.Keys.ToHashSet(StringComparer.Ordinal);
+        var sourceIds = source.Calendars.Select(calendar => calendar.Id).ToHashSet(StringComparer.Ordinal);
+        calendarLookup.Clear();
+        foreach (var calendar in source.Calendars)
+        {
+            calendarLookup[calendar.Id] = calendar;
+        }
+
+        if (!currentIds.SetEquals(sourceIds))
+        {
+            state = state with
+            {
+                EnabledCalendars = source.Calendars
+                    .Where(calendar => calendar.IsEnabled)
+                    .Select(calendar => calendar.Id)
+                    .ToHashSet(StringComparer.Ordinal),
+            };
+            BuildCalendarFilters();
+        }
+    }
+
     private void BuildTitleFilters()
     {
         TitleFilters.Clear();
@@ -332,6 +380,11 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         state = state with { EnabledCalendars = enabledCalendars };
+        if (source is ICalendarSelectionStore selectionStore)
+        {
+            selectionStore.SetCalendarEnabled(calendarId, enabled);
+        }
+
         ApplyVisibility();
     }
 
@@ -495,7 +548,30 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private void ReportUnexpectedError(Exception exception)
     {
         SetLastTechnicalError(exception);
-        StatusText = "The sample schedule could not be loaded because of an unexpected error. Try again.";
+        StatusText = "The calendar could not be loaded because of an unexpected error. Try again.";
+    }
+
+    private string BuildFailureStatus(CalendarLoadException exception)
+    {
+        if (occurrenceSet.RawOccurrences.Count == 0)
+        {
+            return exception.Message;
+        }
+
+        return $"{exception.Message} Showing previously loaded calendar data.";
+    }
+
+    private string BuildSuccessStatus(CalendarLoadResult result)
+    {
+        if (source is FakeCalendarOccurrenceSource)
+        {
+            return $"Sample schedule loaded at {result.RefreshedAt.LocalDateTime:t}";
+        }
+
+        var warning = result.UnreadableResourceCount == 0
+            ? string.Empty
+            : $" — {result.UnreadableResourceCount} item(s) could not be read";
+        return $"Updated from Yahoo at {result.RefreshedAt.LocalDateTime:t}{warning}";
     }
 
     private void ReportLoadErrorIfCurrent(int version, Exception exception, string message)

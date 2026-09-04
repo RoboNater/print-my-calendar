@@ -343,12 +343,12 @@ public sealed class MainWindowViewModelTests
     {
         public IReadOnlyList<CalendarSource> Calendars { get; } = [new("college", "College")];
 
-        public Task<IReadOnlyList<CalendarOccurrence>> LoadAsync(
+        public Task<CalendarLoadResult> LoadAsync(
             MonthGridRange range,
             CancellationToken cancellationToken)
         {
             _ = range;
-            return Task.FromResult(occurrences);
+            return Task.FromResult(Result(occurrences));
         }
     }
 
@@ -356,7 +356,7 @@ public sealed class MainWindowViewModelTests
     {
         public IReadOnlyList<CalendarSource> Calendars { get; } = [new("college", "College")];
 
-        public Task<IReadOnlyList<CalendarOccurrence>> LoadAsync(
+        public Task<CalendarLoadResult> LoadAsync(
             MonthGridRange range,
             CancellationToken cancellationToken)
         {
@@ -371,12 +371,12 @@ public sealed class MainWindowViewModelTests
 
         public IReadOnlyList<CalendarOccurrence> Occurrences { get; set; } = [occurrence];
 
-        public Task<IReadOnlyList<CalendarOccurrence>> LoadAsync(
+        public Task<CalendarLoadResult> LoadAsync(
             MonthGridRange range,
             CancellationToken cancellationToken)
         {
             _ = range;
-            return Task.FromResult(Occurrences);
+            return Task.FromResult(Result(Occurrences));
         }
     }
 
@@ -392,7 +392,7 @@ public sealed class MainWindowViewModelTests
         public TaskCompletionSource ReleaseFirstFailure { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public async Task<IReadOnlyList<CalendarOccurrence>> LoadAsync(
+        public async Task<CalendarLoadResult> LoadAsync(
             MonthGridRange range,
             CancellationToken cancellationToken)
         {
@@ -409,7 +409,7 @@ public sealed class MainWindowViewModelTests
                 range.DisplayedMonth.Month,
                 1,
                 9);
-            return
+            return Result(
             [
                 new CalendarOccurrence(
                     "college",
@@ -418,7 +418,7 @@ public sealed class MainWindowViewModelTests
                     start.AddHours(1),
                     false,
                     "Newer successful result"),
-            ];
+            ]);
         }
     }
 
@@ -433,7 +433,7 @@ public sealed class MainWindowViewModelTests
 
         public bool FirstRequestWasCancelled { get; private set; }
 
-        public async Task<IReadOnlyList<CalendarOccurrence>> LoadAsync(
+        public async Task<CalendarLoadResult> LoadAsync(
             MonthGridRange range,
             CancellationToken cancellationToken)
         {
@@ -457,7 +457,7 @@ public sealed class MainWindowViewModelTests
                 range.DisplayedMonth.Month,
                 1,
                 9);
-            return
+            return Result(
             [
                 new CalendarOccurrence(
                     "college",
@@ -466,7 +466,10 @@ public sealed class MainWindowViewModelTests
                     start.AddHours(1),
                     false,
                     $"{range.DisplayedMonth:MMMM} result"),
-            ];
+            ]);
         }
     }
+
+    private static CalendarLoadResult Result(IReadOnlyList<CalendarOccurrence> occurrences) =>
+        new(occurrences, DateTimeOffset.Now);
 }

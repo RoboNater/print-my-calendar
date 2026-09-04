@@ -1,0 +1,102 @@
+<Window x:Class="YahooMonthPrint.App.SetupWizardWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Connect Yahoo Calendar"
+        Width="620"
+        Height="470"
+        MinWidth="560"
+        MinHeight="420"
+        ResizeMode="CanResizeWithGrip"
+        WindowStartupLocation="CenterScreen">
+    <Grid Margin="28">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0">
+            <StackPanel x:Name="WelcomePanel" VerticalAlignment="Center">
+                <TextBlock FontSize="30" FontWeight="SemiBold" Text="Yahoo Month Print" />
+                <TextBlock Margin="0,18,0,0"
+                           FontSize="17"
+                           Text="Print your Yahoo Calendar with event details visible directly in the monthly calendar."
+                           TextWrapping="Wrap" />
+            </StackPanel>
+
+            <StackPanel x:Name="AccountPanel" Visibility="Collapsed">
+                <TextBlock FontSize="24" FontWeight="SemiBold" Text="Yahoo Account" />
+                <TextBlock Margin="0,14,0,4" Text="Yahoo email address or Yahoo ID" />
+                <TextBox x:Name="AccountTextBox" MinHeight="34" Padding="7" AutomationProperties.Name="Yahoo account name" />
+                <TextBlock Margin="0,14,0,4" Text="Yahoo app password" />
+                <PasswordBox x:Name="AppPasswordBox" MinHeight="34" Padding="7" AutomationProperties.Name="Yahoo app password" />
+                <TextBlock Margin="0,14,0,0"
+                           Text="Yahoo requires a separate app password for third-party calendar applications. Do not enter your normal Yahoo password."
+                           TextWrapping="Wrap" />
+                <Button Margin="0,12,0,0"
+                        Padding="10,5"
+                        HorizontalAlignment="Left"
+                        Click="OnOpenYahooSecurity"
+                        Content="Open Yahoo Account Security" />
+                <TextBlock x:Name="AccountValidationText"
+                           Margin="0,12,0,0"
+                           Foreground="#FF9A231F"
+                           TextWrapping="Wrap" />
+            </StackPanel>
+
+            <StackPanel x:Name="ConnectionPanel" Visibility="Collapsed" VerticalAlignment="Center">
+                <TextBlock FontSize="24" FontWeight="SemiBold" Text="Test Connection" />
+                <TextBlock x:Name="ConnectionStatusText"
+                           Margin="0,18,0,0"
+                           FontSize="17"
+                           TextWrapping="Wrap" />
+                <TextBlock x:Name="ConnectionTechnicalText"
+                           Margin="0,10,0,0"
+                           Foreground="#FF5D626B"
+                           TextWrapping="Wrap" />
+            </StackPanel>
+
+            <StackPanel x:Name="CalendarsPanel" Visibility="Collapsed">
+                <TextBlock FontSize="24" FontWeight="SemiBold" Text="Choose Calendars" />
+                <TextBlock Margin="0,10,0,10"
+                           Text="Choose the calendars to show. You can change this later in Settings."
+                           TextWrapping="Wrap" />
+                <ListBox x:Name="CalendarsList" BorderThickness="1" MinHeight="230">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <CheckBox MinHeight="32"
+                                      Margin="8,2"
+                                      Content="{Binding DisplayName}"
+                                      IsChecked="{Binding IsSelected}" />
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <TextBlock x:Name="CalendarValidationText"
+                           Margin="0,8,0,0"
+                           Foreground="#FF9A231F" />
+            </StackPanel>
+        </Grid>
+
+        <DockPanel Grid.Row="1" Margin="0,20,0,0" LastChildFill="False">
+            <Button x:Name="CancelButton"
+                    MinWidth="90"
+                    MinHeight="34"
+                    DockPanel.Dock="Left"
+                    Click="OnCancel"
+                    Content="Cancel" />
+            <Button x:Name="PrimaryButton"
+                    MinWidth="120"
+                    MinHeight="34"
+                    Margin="8,0,0,0"
+                    DockPanel.Dock="Right"
+                    Click="OnPrimary"
+                    Content="Get Started" />
+            <Button x:Name="BackButton"
+                    MinWidth="90"
+                    MinHeight="34"
+                    DockPanel.Dock="Right"
+                    Click="OnBack"
+                    Content="Back"
+                    Visibility="Collapsed" />
+        </DockPanel>
+    </Grid>
+</Window>

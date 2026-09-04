@@ -17,6 +17,8 @@ public partial class MainWindow : Window
         Closed += OnClosed;
     }
 
+    public event EventHandler? SettingsRequested;
+
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         if (initialized)
@@ -25,8 +27,23 @@ public partial class MainWindow : Window
         }
 
         initialized = true;
-        viewModel.RefreshCommand.Execute(null);
+        _ = InitializeAsync();
     }
 
     private void OnClosed(object? sender, EventArgs e) => viewModel.Dispose();
+
+    private void OnSettingsClicked(object sender, RoutedEventArgs e) =>
+        SettingsRequested?.Invoke(this, EventArgs.Empty);
+
+    private async Task InitializeAsync()
+    {
+        try
+        {
+            await viewModel.InitializeAsync();
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            _ = exception;
+        }
+    }
 }

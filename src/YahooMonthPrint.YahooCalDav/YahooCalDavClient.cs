@@ -5,7 +5,17 @@ using YahooMonthPrint.Core;
 
 namespace YahooMonthPrint.YahooCalDav;
 
-public sealed class YahooCalDavClient
+public interface IYahooCalDavClient : IDisposable
+{
+    Task<IReadOnlyList<CalDavCalendar>> DiscoverCalendarsAsync(CancellationToken cancellationToken);
+
+    Task<CalendarQueryResult> QueryCalendarsAsync(
+        IReadOnlyCollection<CalDavCalendar> calendars,
+        MonthGridRange range,
+        CancellationToken cancellationToken);
+}
+
+public sealed class YahooCalDavClient : IYahooCalDavClient
 {
     public static readonly Uri DefaultServiceUri = new("https://caldav.calendar.yahoo.com/");
 
@@ -29,6 +39,7 @@ public sealed class YahooCalDavClient
     private readonly HttpClient httpClient;
     private readonly IcsOccurrenceParser occurrenceParser;
     private readonly Uri serviceUri;
+    private bool disposed;
 
     public YahooCalDavClient(
         HttpClient httpClient,
@@ -61,6 +72,7 @@ public sealed class YahooCalDavClient
     public async Task<IReadOnlyList<CalDavCalendar>> DiscoverCalendarsAsync(
         CancellationToken cancellationToken)
     {
+        ObjectDisposedException.ThrowIf(disposed, this);
         var principalXml = await SendXmlAsync(
             serviceUri,
             "PROPFIND",
@@ -95,6 +107,7 @@ public sealed class YahooCalDavClient
         MonthGridRange range,
         CancellationToken cancellationToken)
     {
+        ObjectDisposedException.ThrowIf(disposed, this);
         ArgumentNullException.ThrowIfNull(calendars);
         ArgumentNullException.ThrowIfNull(range);
 
@@ -118,6 +131,7 @@ public sealed class YahooCalDavClient
         MonthGridRange range,
         CancellationToken cancellationToken)
     {
+        ObjectDisposedException.ThrowIf(disposed, this);
         ArgumentNullException.ThrowIfNull(calendar);
         ArgumentNullException.ThrowIfNull(range);
         EnsureHttps(calendar.Uri);
@@ -161,6 +175,17 @@ public sealed class YahooCalDavClient
         }
 
         return new CalendarQueryResult(occurrences, issues);
+    }
+
+    public void Dispose()
+    {
+        if (disposed)
+        {
+            return;
+        }
+
+        disposed = true;
+        httpClient.Dispose();
     }
 
     private async Task<string> SendXmlAsync(
