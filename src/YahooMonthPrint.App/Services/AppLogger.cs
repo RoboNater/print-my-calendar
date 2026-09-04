@@ -30,11 +30,20 @@ public sealed class RotatingFileAppLogger : IAppLogger
         var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "unknown";
         var line = $"{DateTimeOffset.Now:O}\t{version}\t{safeCategory}\t{safeStatus}\t{safeResource}\t{exceptionType}{Environment.NewLine}";
 
-        lock (sync)
+        try
         {
-            Directory.CreateDirectory(directory);
-            RotateIfRequired();
-            File.AppendAllText(path, line);
+            lock (sync)
+            {
+                Directory.CreateDirectory(directory);
+                RotateIfRequired();
+                File.AppendAllText(path, line);
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
         }
     }
 

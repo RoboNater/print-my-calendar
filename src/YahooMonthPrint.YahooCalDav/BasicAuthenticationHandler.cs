@@ -5,7 +5,7 @@ namespace YahooMonthPrint.YahooCalDav;
 
 public sealed class BasicAuthenticationHandler : DelegatingHandler
 {
-    private readonly string parameter;
+    private string parameter;
 
     public BasicAuthenticationHandler(
         string userName,
@@ -25,5 +25,11 @@ public sealed class BasicAuthenticationHandler : DelegatingHandler
     {
         request.Headers.Authorization = new AuthenticationHeaderValue("Basic", parameter);
         return base.SendAsync(request, cancellationToken);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        parameter = string.Empty;
+        base.Dispose(disposing);
     }
 }

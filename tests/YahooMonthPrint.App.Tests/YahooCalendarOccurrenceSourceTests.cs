@@ -107,7 +107,8 @@ public sealed class YahooCalendarOccurrenceSourceTests : IDisposable
         await viewModel.InitializeAsync();
 
         Assert.Equal("cached", Assert.Single(viewModel.VisibleOccurrences).Title);
-        Assert.Contains("previously loaded", viewModel.StatusText, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("cached calendar data", viewModel.StatusText, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("last updated", viewModel.StatusText, StringComparison.OrdinalIgnoreCase);
         Assert.IsType<CalendarLoadException>(viewModel.LastTechnicalError);
         Assert.Equal(range.Start, source.CachedRange?.Start);
     }

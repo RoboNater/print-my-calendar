@@ -23,6 +23,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private int loadVersion;
     private Task pendingFilterUpdate = Task.CompletedTask;
     private bool isBatchUpdatingTitleFilters;
+    private DateTimeOffset? lastLoadedAt;
+    private int lastUnreadableResourceCount;
+    private bool isShowingCachedData;
     private bool disposed;
 
     public MainWindowViewModel(
@@ -227,7 +230,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             if (cached is not null)
             {
                 ApplyLoadResult(cached, range);
-                StatusText = $"Showing cached Yahoo data from {cached.RefreshedAt.LocalDateTime:g}; refreshing…";
+                var warning = cached.UnreadableResourceCount == 0
+                    ? string.Empty
+                    : $" ({cached.UnreadableResourceCount} unreadable item(s))";
+                StatusText = $"Showing cached Yahoo data from {cached.RefreshedAt.LocalDateTime:g}{warning}; refreshing…";
             }
         }
 
@@ -326,6 +332,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         SynchronizeCalendarMetadata();
         occurrenceSet = new MonthOccurrenceSet(result.Occurrences);
+        lastLoadedAt = result.RefreshedAt;
+        lastUnreadableResourceCount = result.UnreadableResourceCount;
+        isShowingCachedData = result.IsFromCache;
         SynchronizeHiddenOccurrenceDetails(result.Occurrences, range);
         BuildTitleFilters();
         ApplyVisibility();
@@ -558,7 +567,13 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             return exception.Message;
         }
 
-        return $"{exception.Message} Showing previously loaded calendar data.";
+        var loadedDescription = isShowingCachedData && lastLoadedAt is { } cachedAt
+            ? $"Showing cached calendar data last updated {cachedAt.LocalDateTime:g}."
+            : "Showing previously loaded calendar data.";
+        var warning = lastUnreadableResourceCount == 0
+            ? string.Empty
+            : $" {lastUnreadableResourceCount} cached item(s) could not be read.";
+        return $"{exception.Message} {loadedDescription}{warning}";
     }
 
     private string BuildSuccessStatus(CalendarLoadResult result)

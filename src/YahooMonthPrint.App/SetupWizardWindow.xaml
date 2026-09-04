@@ -49,10 +49,12 @@
                            Margin="0,18,0,0"
                            FontSize="17"
                            TextWrapping="Wrap" />
-                <TextBlock x:Name="ConnectionTechnicalText"
-                           Margin="0,10,0,0"
-                           Foreground="#FF5D626B"
-                           TextWrapping="Wrap" />
+                <Expander Header="Technical Details" Margin="0,10,0,0">
+                    <TextBlock x:Name="ConnectionTechnicalText"
+                               Margin="8"
+                               Foreground="#FF5D626B"
+                               TextWrapping="Wrap" />
+                </Expander>
             </StackPanel>
 
             <StackPanel x:Name="CalendarsPanel" Visibility="Collapsed">

@@ -108,6 +108,29 @@ public sealed class IcsOccurrenceParserTests
     }
 
     [Fact]
+    public void TreatsFloatingTimesAsViewerLocalClockTime()
+    {
+        const string ics = """
+            BEGIN:VCALENDAR
+            VERSION:2.0
+            PRODID:-//Yahoo Month Print//Tests//EN
+            BEGIN:VEVENT
+            UID:floating@example.test
+            DTSTAMP:20260101T000000Z
+            DTSTART:20260312T090000
+            DTEND:20260312T100000
+            SUMMARY:Local appointment
+            END:VEVENT
+            END:VCALENDAR
+            """;
+
+        var occurrence = Assert.Single(parser.Parse("personal", "floating.ics", ics, March));
+
+        Assert.Equal(9, occurrence.Start.Hour);
+        Assert.Equal(TimeZoneInfo.Local.GetUtcOffset(occurrence.Start.DateTime), occurrence.Start.Offset);
+    }
+
+    [Fact]
     public void IncludesAnEventThatStartsBeforeTheGridAndOverlapsIt()
     {
         const string ics = """

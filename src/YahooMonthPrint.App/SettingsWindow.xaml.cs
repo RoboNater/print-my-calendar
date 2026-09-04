@@ -49,23 +49,27 @@ public partial class SettingsWindow : Window
 
     private async void OnTestConnection(object sender, RoutedEventArgs e)
     {
-        var account = settings.YahooAccount;
-        var password = string.IsNullOrWhiteSpace(account) ? null : credentialStore.Read(account);
-        if (string.IsNullOrWhiteSpace(account) || string.IsNullOrEmpty(password))
-        {
-            ConnectionStatusText.Text = "No saved Yahoo connection is available.";
-            return;
-        }
-
-        ConnectionStatusText.Text = "Connecting…";
         try
         {
+            var account = settings.YahooAccount;
+            var password = string.IsNullOrWhiteSpace(account) ? null : credentialStore.Read(account);
+            if (string.IsNullOrWhiteSpace(account) || string.IsNullOrEmpty(password))
+            {
+                ConnectionStatusText.Text = "No saved Yahoo connection is available.";
+                return;
+            }
+
+            ConnectionStatusText.Text = "Connecting…";
             var discovered = await connectionService.DiscoverAsync(account, password, CancellationToken.None);
             ConnectionStatusText.Text = $"Connected successfully. Yahoo returned {discovered.Count} calendar(s).";
         }
         catch (CalendarLoadException exception)
         {
             ConnectionStatusText.Text = exception.Message;
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            ConnectionStatusText.Text = "The connection could not be tested. Try again.";
         }
     }
 
@@ -78,9 +82,16 @@ public partial class SettingsWindow : Window
             return;
         }
 
-        accountService.ChangePassword(account, NewPasswordBox.Password);
-        NewPasswordBox.Clear();
-        ConnectionStatusText.Text = "The new app password was saved securely.";
+        try
+        {
+            accountService.ChangePassword(account, NewPasswordBox.Password);
+            NewPasswordBox.Clear();
+            ConnectionStatusText.Text = "The new app password was saved securely.";
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            ConnectionStatusText.Text = "The app password could not be saved. Try again.";
+        }
     }
 
     private async void OnDisconnect(object sender, RoutedEventArgs e)
@@ -102,15 +113,29 @@ public partial class SettingsWindow : Window
             return;
         }
 
-        await accountService.DisconnectAsync(account, CancellationToken.None);
-        WasDisconnected = true;
-        DialogResult = true;
+        try
+        {
+            await accountService.DisconnectAsync(account, CancellationToken.None);
+            WasDisconnected = true;
+            DialogResult = true;
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            ConnectionStatusText.Text = "The account could not be disconnected. Try again.";
+        }
     }
 
     private async void OnClearCache(object sender, RoutedEventArgs e)
     {
-        await cacheStore.ClearAsync(CancellationToken.None);
-        PrivacyStatusText.Text = "Cached calendar data was cleared. Your Yahoo connection is still saved.";
+        try
+        {
+            await cacheStore.ClearAsync(CancellationToken.None);
+            PrivacyStatusText.Text = "Cached calendar data was cleared. Your Yahoo connection is still saved.";
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            PrivacyStatusText.Text = "Cached calendar data could not be cleared. Try again.";
+        }
     }
 
     private async void OnSave(object sender, RoutedEventArgs e)
@@ -121,22 +146,34 @@ public partial class SettingsWindow : Window
             return;
         }
 
-        settings = settings with
+        try
         {
-            Calendars = calendars.Select(calendar => calendar.Value with
+            settings = settings with
             {
-                IsSelected = calendar.IsSelected,
-            }).ToArray(),
-            DetailLevel = Enum.Parse<DetailLevel>(SelectedValue(DetailLevelCombo)),
-            MaximumDescriptionLines = int.Parse(
-                SelectedValue(DescriptionLinesCombo),
-                System.Globalization.CultureInfo.InvariantCulture),
-            ShowLocations = ShowLocationsCheckBox.IsChecked == true,
-            PaperSize = SelectedValue(PaperSizeCombo),
-            Orientation = SelectedValue(OrientationCombo),
-        };
-        await settingsStore.SaveAsync(settings, CancellationToken.None);
-        DialogResult = true;
+                Calendars = calendars.Select(calendar => calendar.Value with
+                {
+                    IsSelected = calendar.IsSelected,
+                }).ToArray(),
+                DetailLevel = Enum.Parse<DetailLevel>(SelectedValue(DetailLevelCombo)),
+                MaximumDescriptionLines = int.Parse(
+                    SelectedValue(DescriptionLinesCombo),
+                    System.Globalization.CultureInfo.InvariantCulture),
+                ShowLocations = ShowLocationsCheckBox.IsChecked == true,
+                PaperSize = SelectedValue(PaperSizeCombo),
+                Orientation = SelectedValue(OrientationCombo),
+            };
+            await settingsStore.SaveAsync(settings, CancellationToken.None);
+            DialogResult = true;
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            MessageBox.Show(
+                this,
+                "Settings could not be saved. Try again.",
+                "Yahoo Month Print",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
     }
 
     private static void SelectComboItem(ComboBox comboBox, string value)

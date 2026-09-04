@@ -70,8 +70,22 @@ public partial class SetupWizardWindow : Window
         DialogResult = false;
     }
 
-    private void OnOpenYahooSecurity(object sender, RoutedEventArgs e) =>
-        Process.Start(new ProcessStartInfo(YahooSecurityUri.AbsoluteUri) { UseShellExecute = true });
+    private void OnOpenYahooSecurity(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(YahooSecurityUri.AbsoluteUri) { UseShellExecute = true });
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            MessageBox.Show(
+                this,
+                $"The Yahoo Account Security page could not be opened. Visit {YahooSecurityUri.AbsoluteUri} in your browser.",
+                "Yahoo Month Print",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+    }
 
     private async Task ConnectAsync()
     {
@@ -101,7 +115,7 @@ public partial class SetupWizardWindow : Window
                 calendars.Add(new SetupCalendarChoice(calendar));
             }
 
-            connectionSucceeded = true;
+            connectionSucceeded = discovered.Count > 0;
             ConnectionStatusText.Text = discovered.Count == 0
                 ? "Connected, but Yahoo returned no calendar collections."
                 : "Connected successfully.";

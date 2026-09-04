@@ -47,6 +47,20 @@ function Test-InnoCompilerCompatibility {
     }
 }
 
+function Test-InnoInstallDirectoryName {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$DirectoryName)
+
+    return $DirectoryName -match '^Inno Setup \d+$'
+}
+
+function Test-InnoCompilerBanner {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Banner)
+
+    return $Banner -match 'Inno Setup \d+ Command-Line Compiler'
+}
+
 function Resolve-InnoCompiler {
     [CmdletBinding()]
     param()
@@ -74,7 +88,7 @@ function Resolve-InnoCompiler {
         }
 
         $versionedInstallDirectories = Get-ChildItem -LiteralPath $innoSearchRoot -Directory -ErrorAction SilentlyContinue |
-            Where-Object Name -Match '^Inno Setup \d+$' |
+            Where-Object { Test-InnoInstallDirectoryName -DirectoryName $_.Name } |
             Sort-Object { [int]($_.Name -replace '^Inno Setup ', '') } -Descending
         foreach ($installDirectory in $versionedInstallDirectories) {
             $innoCandidates.Add((Join-Path $installDirectory.FullName 'ISCC.exe'))
@@ -87,7 +101,7 @@ function Resolve-InnoCompiler {
         }
 
         $innoBanner = Get-InnoCompilerBanner -CompilerPath $innoCandidate
-        if ($innoBanner -match 'Inno Setup \d+ Command-Line Compiler') {
+        if (Test-InnoCompilerBanner -Banner $innoBanner) {
             return $innoCandidate
         }
     }

@@ -1,7 +1,7 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
-using System.Globalization;
 using YahooMonthPrint.Core;
 
 namespace YahooMonthPrint.YahooCalDav.Tests;
@@ -52,7 +52,7 @@ public sealed class YahooCalDavClientTests
 
         Assert.Equal(2, calendars.Count);
         Assert.Equal("College", calendars[0].DisplayName);
-        Assert.Equal("#325EA8FF", calendars[0].Color);
+        Assert.Equal("#FF325EA8", calendars[0].Color);
         Assert.Equal(
             "https://calendar.example.test/dav/calendars/student%40example.com/college%20schedule/",
             calendars[0].Uri.AbsoluteUri);
@@ -171,6 +171,42 @@ public sealed class YahooCalDavClientTests
         Assert.Equal(CalDavFailureKind.Protocol, exception.Kind);
     }
 
+    [Fact]
+    public async Task DiscoveryRejectsCrossOriginHrefsBeforeCredentialsCanBeForwarded()
+    {
+        var handler = new QueueHandler(XmlResponse("""
+            <d:multistatus xmlns:d="DAV:">
+              <d:response><d:propstat><d:prop>
+                <d:current-user-principal><d:href>https://attacker.example.test/principal/</d:href></d:current-user-principal>
+              </d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+            </d:multistatus>
+            """));
+        var client = new YahooCalDavClient(
+            new HttpClient(handler),
+            serviceUri: new Uri("https://calendar.example.test/"));
+
+        var exception = await Assert.ThrowsAsync<CalDavException>(() =>
+            client.DiscoverCalendarsAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal(CalDavFailureKind.Protocol, exception.Kind);
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public async Task ConnectivityFailuresHaveFriendlyAndTechnicalSeparation()
+    {
+        var client = new YahooCalDavClient(
+            new HttpClient(new ThrowingHandler()),
+            serviceUri: new Uri("https://calendar.example.test/"));
+
+        var exception = await Assert.ThrowsAsync<CalDavException>(() =>
+            client.DiscoverCalendarsAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal(CalDavFailureKind.Connectivity, exception.Kind);
+        Assert.Contains("Internet connection", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(nameof(HttpRequestException), exception.TechnicalDetail, StringComparison.Ordinal);
+    }
+
     private const string SingleEventIcs = """
         BEGIN:VCALENDAR
         VERSION:2.0
@@ -226,4 +262,12 @@ public sealed class YahooCalDavClientTests
         string? Depth,
         AuthenticationHeaderValue? Authorization,
         string Body);
+
+    private sealed class ThrowingHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) =>
+            Task.FromException<HttpResponseMessage>(new HttpRequestException("fixture failure"));
+    }
 }

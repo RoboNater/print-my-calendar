@@ -34,6 +34,7 @@ public partial class App : Application
         }
 
         ConfigureServices();
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
         try
         {
             var settings = await settingsStore.LoadAsync();
@@ -50,7 +51,7 @@ public partial class App : Application
         {
             logger.Log("startup", "failed", exception: exception);
             MessageBox.Show(
-                $"Yahoo Month Print could not start. {exception.Message}",
+                "Yahoo Month Print could not start. Restart the application and try again.",
                 "Yahoo Month Print",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
@@ -99,41 +100,58 @@ public partial class App : Application
         window.SettingsRequested += OnSettingsRequested;
         MainWindow = window;
         window.Show();
+        ShutdownMode = ShutdownMode.OnLastWindowClose;
     }
 
-    private async void OnSettingsRequested(object? sender, EventArgs e)
+    private void OnSettingsRequested(object? sender, EventArgs e)
     {
-        if (sender is not MainWindow currentWindow)
+        if (sender is MainWindow currentWindow)
         {
-            return;
+            _ = ShowSettingsAsync(currentWindow);
         }
+    }
 
-        var settings = await settingsStore.LoadAsync();
-        var settingsWindow = new SettingsWindow(
-            settings,
-            settingsStore,
-            cacheStore,
-            credentialStore,
-            accountService,
-            connectionService)
+    private async Task ShowSettingsAsync(MainWindow currentWindow)
+    {
+        try
         {
-            Owner = currentWindow,
-        };
-        if (settingsWindow.ShowDialog() != true)
-        {
-            return;
-        }
+            var settings = await settingsStore.LoadAsync();
+            var settingsWindow = new SettingsWindow(
+                settings,
+                settingsStore,
+                cacheStore,
+                credentialStore,
+                accountService,
+                connectionService)
+            {
+                Owner = currentWindow,
+            };
+            if (settingsWindow.ShowDialog() != true)
+            {
+                return;
+            }
 
-        if (settingsWindow.WasDisconnected && !ShowSetupWizard())
-        {
+            if (settingsWindow.WasDisconnected && !ShowSetupWizard())
+            {
+                currentWindow.Close();
+                Shutdown(0);
+                return;
+            }
+
+            settings = await settingsStore.LoadAsync();
+            ShowMainWindow(settings);
             currentWindow.Close();
-            Shutdown(0);
-            return;
         }
-
-        settings = await settingsStore.LoadAsync();
-        ShowMainWindow(settings);
-        currentWindow.Close();
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            logger.Log("settings", "failed", exception: exception);
+            MessageBox.Show(
+                currentWindow,
+                "Settings could not be updated. Try again.",
+                "Yahoo Month Print",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
     }
 
     private static MainWindow CreateDemoWindow()

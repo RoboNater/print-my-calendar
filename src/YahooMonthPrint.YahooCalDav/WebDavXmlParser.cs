@@ -1,10 +1,11 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
 namespace YahooMonthPrint.YahooCalDav;
 
-internal static class WebDavXmlParser
+internal static partial class WebDavXmlParser
 {
     private static readonly XNamespace Dav = "DAV:";
     private static readonly XNamespace CalDav = "urn:ietf:params:xml:ns:caldav";
@@ -50,12 +51,12 @@ internal static class WebDavXmlParser
 
             var uri = ResolveHref(responseUri, href);
             var displayName = prop.Element(Dav + "displayname")?.Value.Trim();
-            var color = prop.Element(Apple + "calendar-color")?.Value.Trim();
+            var color = NormalizeColor(prop.Element(Apple + "calendar-color")?.Value.Trim());
             calendars.Add(new CalDavCalendar(
                 StableId(uri),
                 string.IsNullOrWhiteSpace(displayName) ? Uri.UnescapeDataString(uri.Segments[^1].Trim('/')) : displayName,
                 uri,
-                string.IsNullOrWhiteSpace(color) ? null : color));
+                color));
         }
 
         return calendars
@@ -119,12 +120,29 @@ internal static class WebDavXmlParser
     private static Uri ResolveHref(Uri responseUri, string href)
     {
         if (!Uri.TryCreate(responseUri, href, out var resolved)
-            || !string.Equals(resolved.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            || !string.Equals(resolved.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(resolved.IdnHost, responseUri.IdnHost, StringComparison.OrdinalIgnoreCase)
+            || resolved.Port != responseUri.Port)
         {
             throw ProtocolFailure("Yahoo returned an invalid or unsafe calendar URI.");
         }
 
         return resolved;
+    }
+
+    private static string? NormalizeColor(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || !ColorPattern().IsMatch(value))
+        {
+            return null;
+        }
+
+        if (value.Length == 9)
+        {
+            return $"#{value[7..9]}{value[1..7]}";
+        }
+
+        return value;
     }
 
     private static string StableId(Uri uri)
@@ -139,4 +157,7 @@ internal static class WebDavXmlParser
             "Yahoo returned an unexpected calendar response.",
             detail,
             innerException);
+
+    [GeneratedRegex("^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$")]
+    private static partial Regex ColorPattern();
 }

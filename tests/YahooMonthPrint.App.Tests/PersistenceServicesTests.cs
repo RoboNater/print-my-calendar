@@ -1,6 +1,7 @@
 using System.IO;
 using YahooMonthPrint.App.Services;
 using YahooMonthPrint.Core;
+using YahooMonthPrint.YahooCalDav;
 
 namespace YahooMonthPrint.App.Tests;
 
@@ -133,6 +134,47 @@ public sealed class PersistenceServicesTests : IDisposable
         Assert.Null(store.Read(account));
     }
 
+    [Fact]
+    public async Task AccountLifecycleUsesCredentialTestDoubleAndSeparatesClearFromDisconnect()
+    {
+        const string account = "student@example.test";
+        var credentials = new TrackingCredentialStore();
+        var settings = new JsonSettingsStore(directory);
+        var cache = new CalendarCacheStore(directory);
+        var service = new YahooAccountService(credentials, settings, cache);
+        var range = MonthGrid.Create(2026, 9);
+        await cache.WriteAsync(
+            range,
+            ["college"],
+            new CalendarLoadResult([CreateOccurrence()], DateTimeOffset.Now),
+            TestContext.Current.CancellationToken);
+
+        await service.SaveConnectionAsync(
+            account,
+            Secret,
+            [
+                new CalDavCalendar(
+                    "college",
+                    "College",
+                    new Uri("https://calendar.example.test/college/")),
+            ],
+            new HashSet<string>(["college"], StringComparer.Ordinal),
+            TestContext.Current.CancellationToken);
+        service.ChangePassword(account, "replacement-app-password");
+
+        Assert.Equal("replacement-app-password", credentials.Read(account));
+        Assert.Equal(account, (await settings.LoadAsync(TestContext.Current.CancellationToken)).YahooAccount);
+
+        await service.DisconnectAsync(account, TestContext.Current.CancellationToken);
+
+        Assert.Null(credentials.Read(account));
+        Assert.Null((await settings.LoadAsync(TestContext.Current.CancellationToken)).YahooAccount);
+        Assert.Null(await cache.TryReadAsync(
+            range,
+            ["college"],
+            TestContext.Current.CancellationToken));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(directory))
@@ -172,5 +214,16 @@ public sealed class PersistenceServicesTests : IDisposable
             start,
             TimeZoneInfo.Local.Id,
             "fixture.ics");
+    }
+
+    private sealed class TrackingCredentialStore : ICredentialStore
+    {
+        private readonly Dictionary<string, string> values = new(StringComparer.OrdinalIgnoreCase);
+
+        public string? Read(string accountName) => values.GetValueOrDefault(accountName);
+
+        public void Write(string accountName, string appPassword) => values[accountName] = appPassword;
+
+        public void Delete(string accountName) => values.Remove(accountName);
     }
 }

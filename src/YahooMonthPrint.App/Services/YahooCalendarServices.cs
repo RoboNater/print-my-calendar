@@ -1,3 +1,4 @@
+using System.IO;
 using YahooMonthPrint.Core;
 using YahooMonthPrint.YahooCalDav;
 
@@ -137,7 +138,17 @@ public sealed class YahooCalendarOccurrenceSource : ICachedCalendarOccurrenceSou
         }
 
         using var client = clientFactory.Create(accountName, appPassword);
-        var selected = SelectedCalendars();
+        CalDavCalendar[] selected;
+        try
+        {
+            selected = SelectedCalendars();
+        }
+        catch (ArgumentException exception)
+        {
+            logger.Log("calendar-query", "invalid-saved-calendar", exception: exception);
+            throw InvalidCalendarSettings(exception);
+        }
+
         if (selected.Length == 0)
         {
             return new CalendarLoadResult([], DateTimeOffset.Now);
@@ -159,16 +170,28 @@ public sealed class YahooCalendarOccurrenceSource : ICachedCalendarOccurrenceSou
             logger.Log("calendar-query", exception.Kind.ToString(), exception: exception);
             throw YahooConnectionService.MapFailure(exception);
         }
+        catch (ArgumentException exception)
+        {
+            logger.Log("calendar-query", "invalid-saved-calendar", exception: exception);
+            throw InvalidCalendarSettings(exception);
+        }
 
         var result = new CalendarLoadResult(
             queryResult.Occurrences,
             DateTimeOffset.Now,
             queryResult.ResourceIssues.Count);
-        await cacheStore.WriteAsync(
-            range,
-            selected.Select(calendar => calendar.Id).ToArray(),
-            result,
-            cancellationToken);
+        try
+        {
+            await cacheStore.WriteAsync(
+                range,
+                selected.Select(calendar => calendar.Id).ToArray(),
+                result,
+                cancellationToken);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            logger.Log("cache", "write-failed", exception: exception);
+        }
         logger.Log(
             "calendar-query",
             queryResult.ResourceIssues.Count == 0
@@ -253,6 +276,12 @@ public sealed class YahooCalendarOccurrenceSource : ICachedCalendarOccurrenceSou
             new Uri(calendar.Uri, UriKind.Absolute),
             calendar.Color))
         .ToArray();
+
+    private static CalendarLoadException InvalidCalendarSettings(ArgumentException exception) => new(
+        CalendarLoadFailureKind.Protocol,
+        "A saved Yahoo calendar address is invalid. Reconnect the account and try again.",
+        exception.GetType().Name,
+        exception);
 }
 
 public sealed class YahooAccountService(
