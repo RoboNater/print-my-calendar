@@ -40,6 +40,8 @@ Yahoo CalDAV query -> normalized Core occurrences -> visibility pipeline
 
 Fetched occurrences remain available in memory while filters change. Screen and print receive one authoritative visible-occurrence result. Preview and printer output use the same generated document rather than rendering the live UI tree.
 
+Phase 2 realizes the first half of this flow with an `ICalendarOccurrenceSource` implemented by a deterministic offline sample. `MainWindowViewModel` retains the raw occurrence set, owns local view state, and delegates all filtering and detail projection to Core. The UI only renders that projected result; it does not duplicate visibility rules. Phase 3 will supply the production Yahoo implementation behind the same source boundary.
+
 ## Async and failure boundaries
 
 - Network, parsing, cache I/O, and substantial print generation must not block the WPF UI thread.
