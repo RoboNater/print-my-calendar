@@ -12,6 +12,54 @@ public interface ISettingsStore
     Task ClearAsync(CancellationToken cancellationToken = default);
 }
 
+public sealed class SerializedSettingsStore(ISettingsStore inner) : ISettingsStore, IDisposable
+{
+    private readonly SemaphoreSlim gate = new(1, 1);
+
+    public async Task<ApplicationSettings> LoadAsync(CancellationToken cancellationToken = default)
+    {
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            return await inner.LoadAsync(cancellationToken);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    public async Task SaveAsync(
+        ApplicationSettings settings,
+        CancellationToken cancellationToken = default)
+    {
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            await inner.SaveAsync(settings, cancellationToken);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    public async Task ClearAsync(CancellationToken cancellationToken = default)
+    {
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            await inner.ClearAsync(cancellationToken);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    public void Dispose() => gate.Dispose();
+}
+
 public sealed class JsonSettingsStore : ISettingsStore
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()

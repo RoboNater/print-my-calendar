@@ -4,9 +4,9 @@ using YahooMonthPrint.App.ViewModels;
 
 namespace YahooMonthPrint.App;
 
-public partial class App : Application
+public partial class App : Application, IDisposable
 {
-    private JsonSettingsStore settingsStore = null!;
+    private SerializedSettingsStore settingsStore = null!;
     private ICalendarCacheStore cacheStore = null!;
     private WindowsCredentialStore credentialStore = null!;
     private IYahooCalDavClientFactory clientFactory = null!;
@@ -59,9 +59,21 @@ public partial class App : Application
         }
     }
 
+    protected override void OnExit(ExitEventArgs e)
+    {
+        Dispose();
+        base.OnExit(e);
+    }
+
+    public void Dispose()
+    {
+        settingsStore?.Dispose();
+        GC.SuppressFinalize(this);
+    }
+
     private void ConfigureServices()
     {
-        settingsStore = new JsonSettingsStore();
+        settingsStore = new SerializedSettingsStore(new JsonSettingsStore());
         cacheStore = new CalendarCacheStore();
         credentialStore = new WindowsCredentialStore();
         clientFactory = new YahooCalDavClientFactory();

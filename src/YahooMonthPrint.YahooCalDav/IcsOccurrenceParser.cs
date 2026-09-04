@@ -21,16 +21,16 @@ public sealed class IcsOccurrenceParser(TimeZoneInfo viewerTimeZone)
 
         var calendar = Calendar.Load(calendarData)
             ?? throw new FormatException("The calendar resource did not contain a VCALENDAR.");
-        var rangeStart = range.Start.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
-        var rangeEnd = range.EndExclusive.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
+        var rangeStartUtc = LocalTimeBoundary.ToUtc(range.Start, viewerTimeZone);
+        var rangeEndUtc = LocalTimeBoundary.ToUtc(range.EndExclusive, viewerTimeZone);
         var longestDuration = calendar.Events
             .Select(GetDuration)
             .DefaultIfEmpty(TimeSpan.Zero)
             .Max();
-        var evaluationStart = rangeStart - longestDuration;
+        var evaluationStartUtc = rangeStartUtc - longestDuration;
         var occurrences = calendar
-            .GetOccurrences(new CalDateTime(evaluationStart), new EvaluationOptions())
-            .TakeWhile(occurrence => occurrence.Period.StartTime.Value < rangeEnd)
+            .GetOccurrences(new CalDateTime(evaluationStartUtc), new EvaluationOptions())
+            .TakeWhile(occurrence => AsUtc(occurrence.Period.StartTime) < rangeEndUtc)
             .Select(occurrence => ConvertOccurrence(calendarId, resourceId, occurrence))
             .Where(occurrence => occurrence is not null)
             .Cast<CalendarOccurrence>()
@@ -82,7 +82,8 @@ public sealed class IcsOccurrenceParser(TimeZoneInfo viewerTimeZone)
             calendarEvent.Location,
             recurrenceId,
             period.StartTime.TzId,
-            resourceId);
+            resourceId,
+            viewerTimeZone);
     }
 
     private DateTimeOffset ConvertDateTime(CalDateTime value, bool isAllDay)
@@ -95,6 +96,22 @@ public sealed class IcsOccurrenceParser(TimeZoneInfo viewerTimeZone)
 
         var utc = DateTime.SpecifyKind(value.AsUtc, DateTimeKind.Utc);
         return TimeZoneInfo.ConvertTime(new DateTimeOffset(utc), viewerTimeZone);
+    }
+
+    private DateTime AsUtc(CalDateTime value)
+    {
+        if (!value.IsFloating && value.HasTime)
+        {
+            return DateTime.SpecifyKind(value.AsUtc, DateTimeKind.Utc);
+        }
+
+        var local = DateTime.SpecifyKind(value.Value, DateTimeKind.Unspecified);
+        while (viewerTimeZone.IsInvalidTime(local))
+        {
+            local = local.AddMinutes(1);
+        }
+
+        return new DateTimeOffset(local, viewerTimeZone.GetUtcOffset(local)).UtcDateTime;
     }
 
     private static TimeSpan GetDuration(CalendarEvent calendarEvent)
@@ -115,6 +132,11 @@ public sealed class IcsOccurrenceParser(TimeZoneInfo viewerTimeZone)
     {
         var start = range.Start.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
         var end = range.EndExclusive.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
+        if (occurrence.Start == occurrence.End)
+        {
+            return occurrence.Start.DateTime >= start && occurrence.Start.DateTime < end;
+        }
+
         return occurrence.Start.DateTime < end && occurrence.End.DateTime > start;
     }
 }

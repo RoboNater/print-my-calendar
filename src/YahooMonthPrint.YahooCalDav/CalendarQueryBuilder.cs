@@ -11,10 +11,8 @@ public static class CalendarQueryBuilder
         ArgumentNullException.ThrowIfNull(range);
         ArgumentNullException.ThrowIfNull(viewerTimeZone);
 
-        var localStart = range.Start.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
-        var localEnd = range.EndExclusive.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
-        var utcStart = TimeZoneInfo.ConvertTimeToUtc(localStart, viewerTimeZone);
-        var utcEnd = TimeZoneInfo.ConvertTimeToUtc(localEnd, viewerTimeZone);
+        var utcStart = LocalTimeBoundary.ToUtc(range.Start, viewerTimeZone);
+        var utcEnd = LocalTimeBoundary.ToUtc(range.EndExclusive, viewerTimeZone);
         var start = utcStart.ToString("yyyyMMdd'T'HHmmss'Z'", CultureInfo.InvariantCulture);
         var end = utcEnd.ToString("yyyyMMdd'T'HHmmss'Z'", CultureInfo.InvariantCulture);
 

@@ -91,6 +91,68 @@ public sealed class YahooCalendarOccurrenceSourceTests : IDisposable
     }
 
     [Fact]
+    public async Task RediscoveryAllowsMultipleCollectionsMatchingOneSelectedDisplayName()
+    {
+        var client = new FakeClient
+        {
+            QueryException = new CalDavException(
+                CalDavFailureKind.CalendarCollectionRejected,
+                "Saved collection rejected.",
+                "HTTP 404"),
+            RejectFirstQueryOnly = true,
+            DiscoveredCalendars =
+            [
+                new CalDavCalendar(
+                    "new-personal-1",
+                    "College",
+                    new Uri("https://calendar.example.test/new-personal-1/")),
+                new CalDavCalendar(
+                    "new-personal-2",
+                    "College",
+                    new Uri("https://calendar.example.test/new-personal-2/")),
+            ],
+        };
+        var source = CreateSource(client);
+
+        await source.LoadAsync(
+            MonthGrid.Create(2026, 9),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, client.QueryCount);
+        Assert.Equal(2, client.LastQueriedCalendars.Count);
+        Assert.All(client.LastQueriedCalendars, calendar => Assert.Equal("College", calendar.DisplayName));
+    }
+
+    [Fact]
+    public async Task CacheProbeUsesSelectedIdsWithoutParsingSavedAddresses()
+    {
+        var range = MonthGrid.Create(2026, 9);
+        var cache = new CalendarCacheStore(directory);
+        var occurrence = CreateOccurrence("cached");
+        await cache.WriteAsync(
+            range,
+            ["college"],
+            new CalendarLoadResult([occurrence], DateTimeOffset.Now),
+            TestContext.Current.CancellationToken);
+        var settings = new ApplicationSettings
+        {
+            YahooAccount = "student@example.test",
+            Calendars = [new SavedCalendar("college", "College", "not a URI", null, true)],
+        };
+        var source = new YahooCalendarOccurrenceSource(
+            settings,
+            new FakeCredentialStore("disposable-app-password"),
+            new JsonSettingsStore(directory),
+            cache,
+            new FakeClientFactory(new FakeClient()),
+            new NullAppLogger());
+
+        var result = await source.TryLoadCachedAsync(range, TestContext.Current.CancellationToken);
+
+        Assert.Equal(occurrence, Assert.Single(Assert.IsType<CalendarLoadResult>(result).Occurrences));
+    }
+
+    [Fact]
     public async Task InitializeDisplaysCacheThenKeepsItWhenRefreshFails()
     {
         var range = MonthGrid.Create(2026, 9);
@@ -196,9 +258,15 @@ public sealed class YahooCalendarOccurrenceSourceTests : IDisposable
 
         public CalDavException? QueryException { get; init; }
 
+        public bool RejectFirstQueryOnly { get; init; }
+
         public IReadOnlyList<CalDavCalendar> DiscoveredCalendars { get; init; } = [];
 
         public int DiscoveryCount { get; private set; }
+
+        public int QueryCount { get; private set; }
+
+        public IReadOnlyCollection<CalDavCalendar> LastQueriedCalendars { get; private set; } = [];
 
         public Task<IReadOnlyList<CalDavCalendar>> DiscoverCalendarsAsync(
             CancellationToken cancellationToken)
@@ -210,9 +278,14 @@ public sealed class YahooCalendarOccurrenceSourceTests : IDisposable
         public Task<CalendarQueryResult> QueryCalendarsAsync(
             IReadOnlyCollection<CalDavCalendar> calendars,
             MonthGridRange range,
-            CancellationToken cancellationToken) => QueryException is null
+            CancellationToken cancellationToken)
+        {
+            QueryCount++;
+            LastQueriedCalendars = calendars;
+            return QueryException is null || RejectFirstQueryOnly && QueryCount > 1
                 ? Task.FromResult(QueryResult)
                 : Task.FromException<CalendarQueryResult>(QueryException);
+        }
 
         public void Dispose()
         {

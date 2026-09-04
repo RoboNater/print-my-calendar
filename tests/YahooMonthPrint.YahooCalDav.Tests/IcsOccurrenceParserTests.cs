@@ -152,4 +152,50 @@ public sealed class IcsOccurrenceParserTests
         Assert.Equal(20, occurrence.Start.Day);
         Assert.Equal(3, occurrence.End.Day);
     }
+
+    [Fact]
+    public void IncludesUtcEventOnLastGridDayForViewerWestOfUtc()
+    {
+        const string ics = """
+            BEGIN:VCALENDAR
+            VERSION:2.0
+            PRODID:-//Yahoo Month Print//Tests//EN
+            BEGIN:VEVENT
+            UID:last-day@example.test
+            DTSTAMP:20260101T000000Z
+            DTSTART:20260405T010000Z
+            DTEND:20260405T020000Z
+            SUMMARY:Late appointment
+            END:VEVENT
+            END:VCALENDAR
+            """;
+        var eastern = TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time");
+        var occurrence = Assert.Single(
+            new IcsOccurrenceParser(eastern).Parse("personal", "last-day.ics", ics, March));
+
+        Assert.Equal(new DateTime(2026, 4, 4, 21, 0, 0), occurrence.Start.DateTime);
+    }
+
+    [Fact]
+    public void IncludesUtcEventOnFirstGridDayForViewerEastOfUtc()
+    {
+        const string ics = """
+            BEGIN:VCALENDAR
+            VERSION:2.0
+            PRODID:-//Yahoo Month Print//Tests//EN
+            BEGIN:VEVENT
+            UID:first-day@example.test
+            DTSTAMP:20260101T000000Z
+            DTSTART:20260228T200000Z
+            DTEND:20260228T210000Z
+            SUMMARY:Morning appointment
+            END:VEVENT
+            END:VCALENDAR
+            """;
+        var newZealand = TimeZoneInfo.FindSystemTimeZoneById("New Zealand Standard Time");
+        var occurrence = Assert.Single(
+            new IcsOccurrenceParser(newZealand).Parse("personal", "first-day.ics", ics, March));
+
+        Assert.Equal(new DateTime(2026, 3, 1, 9, 0, 0), occurrence.Start.DateTime);
+    }
 }

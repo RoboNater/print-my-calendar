@@ -34,6 +34,24 @@ public sealed class PersistenceServicesTests : IDisposable
     }
 
     [Fact]
+    public async Task SerializedSettingsStoreMakesAConcurrentReadWaitForThePendingWrite()
+    {
+        var original = CreateSettings();
+        var updated = original with { MaximumDescriptionLines = 8 };
+        var inner = new BlockingSettingsStore(original);
+        using var store = new SerializedSettingsStore(inner);
+
+        var save = store.SaveAsync(updated, TestContext.Current.CancellationToken);
+        await inner.SaveStarted.Task.WaitAsync(TestContext.Current.CancellationToken);
+        var load = store.LoadAsync(TestContext.Current.CancellationToken);
+
+        Assert.False(load.IsCompleted);
+        inner.AllowSave.TrySetResult();
+        await save;
+        Assert.Equal(8, (await load).MaximumDescriptionLines);
+    }
+
+    [Fact]
     public async Task CacheRoundTripsAndRequiresExactRangeAndCalendarSet()
     {
         var store = new CalendarCacheStore(directory);
@@ -225,5 +243,34 @@ public sealed class PersistenceServicesTests : IDisposable
         public void Write(string accountName, string appPassword) => values[accountName] = appPassword;
 
         public void Delete(string accountName) => values.Remove(accountName);
+    }
+
+    private sealed class BlockingSettingsStore(ApplicationSettings settings) : ISettingsStore
+    {
+        private ApplicationSettings current = settings;
+
+        public TaskCompletionSource SaveStarted { get; } = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource AllowSave { get; } = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task<ApplicationSettings> LoadAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(current);
+
+        public async Task SaveAsync(
+            ApplicationSettings value,
+            CancellationToken cancellationToken = default)
+        {
+            SaveStarted.TrySetResult();
+            await AllowSave.Task.WaitAsync(cancellationToken);
+            current = value;
+        }
+
+        public Task ClearAsync(CancellationToken cancellationToken = default)
+        {
+            current = new ApplicationSettings();
+            return Task.CompletedTask;
+        }
     }
 }

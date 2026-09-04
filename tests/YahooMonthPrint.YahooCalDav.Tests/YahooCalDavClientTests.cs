@@ -36,7 +36,8 @@ public sealed class YahooCalDavClientTests
                   </d:response>
                   <d:response>
                     <d:href>college%20schedule/</d:href>
-                    <d:propstat><d:prop><d:displayname>College</d:displayname><d:resourcetype><d:collection/><c:calendar/></d:resourcetype><a:calendar-color>#325EA8FF</a:calendar-color></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>
+                    <d:propstat><d:prop><d:displayname>College</d:displayname><a:calendar-color>#325EA8FF</a:calendar-color></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>
+                    <d:propstat><d:prop><d:resourcetype><d:collection/><c:calendar/></d:resourcetype></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>
                   </d:response>
                   <d:response>
                     <d:href>missing-name/</d:href>
@@ -154,7 +155,19 @@ public sealed class YahooCalDavClientTests
         Assert.DoesNotContain(password, exception.ToString(), StringComparison.Ordinal);
         var request = Assert.Single(handler.Requests);
         Assert.Equal("Basic", request.Authorization?.Scheme);
-        Assert.DoesNotContain(password, request.Authorization?.Parameter ?? string.Empty, StringComparison.Ordinal);
+        var decoded = Encoding.UTF8.GetString(
+            Convert.FromBase64String(request.Authorization?.Parameter ?? string.Empty));
+        Assert.Equal($"student@example.test:{password}", decoded);
+    }
+
+    [Fact]
+    public void QueryHandlesGridBoundaryThatFallsInSkippedLocalTime()
+    {
+        var chile = TimeZoneInfo.FindSystemTimeZoneById("Pacific SA Standard Time");
+
+        var query = CalendarQueryBuilder.Build(MonthGrid.Create(2025, 8), chile);
+
+        Assert.Contains("end=\"20250907T040000Z\"", query, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -13,7 +13,8 @@ public sealed record CalendarOccurrence
         string? location = null,
         DateTimeOffset? recurrenceId = null,
         string? sourceTimeZoneId = null,
-        string? sourceResourceId = null)
+        string? sourceResourceId = null,
+        TimeZoneInfo? viewerTimeZone = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(calendarId);
         ArgumentException.ThrowIfNullOrWhiteSpace(uid);
@@ -25,11 +26,12 @@ public sealed record CalendarOccurrence
 
         if (!isAllDay)
         {
-            EnsureViewerLocal(start, nameof(start));
-            EnsureViewerLocal(end, nameof(end));
+            var expectedTimeZone = viewerTimeZone ?? TimeZoneInfo.Local;
+            EnsureViewerLocal(start, expectedTimeZone, nameof(start));
+            EnsureViewerLocal(end, expectedTimeZone, nameof(end));
             if (recurrenceId is { } value)
             {
-                EnsureViewerLocal(value, nameof(recurrenceId));
+                EnsureViewerLocal(value, expectedTimeZone, nameof(recurrenceId));
             }
         }
 
@@ -70,12 +72,15 @@ public sealed record CalendarOccurrence
 
     public OccurrenceKey Key => new(CalendarId, Uid, RecurrenceId ?? Start);
 
-    private static void EnsureViewerLocal(DateTimeOffset value, string parameterName)
+    private static void EnsureViewerLocal(
+        DateTimeOffset value,
+        TimeZoneInfo viewerTimeZone,
+        string parameterName)
     {
-        if (value.Offset != value.ToLocalTime().Offset)
+        if (value.Offset != viewerTimeZone.GetUtcOffset(value.UtcDateTime))
         {
             throw new ArgumentException(
-                "Timed occurrences must be normalized to the Windows user's local timezone.",
+                "Timed occurrences must be normalized to the configured viewer timezone.",
                 parameterName);
         }
     }

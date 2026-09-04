@@ -32,6 +32,10 @@ public sealed record SavedCalendar(
     string? Color,
     bool IsSelected)
 {
-    public CalendarSource ToCalendarSource() =>
-        new(Id, DisplayName, new Uri(Uri, UriKind.Absolute), Color, IsSelected);
+    public CalendarSource ToCalendarSource() => new(
+        Id,
+        DisplayName,
+        System.Uri.TryCreate(Uri, UriKind.Absolute, out var calendarUri) ? calendarUri : null,
+        Color,
+        IsSelected);
 }

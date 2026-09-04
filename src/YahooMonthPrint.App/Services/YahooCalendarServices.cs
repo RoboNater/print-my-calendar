@@ -83,7 +83,10 @@ public sealed class YahooCalendarOccurrenceSource : ICachedCalendarOccurrenceSou
         MonthGridRange range,
         CancellationToken cancellationToken)
     {
-        var calendarIds = SelectedCalendars().Select(calendar => calendar.Id).ToArray();
+        var calendarIds = settings.Calendars
+            .Where(calendar => calendar.IsSelected)
+            .Select(calendar => calendar.Id)
+            .ToArray();
         return cacheStore.TryReadAsync(range, calendarIds, cancellationToken);
     }
 
@@ -143,7 +146,7 @@ public sealed class YahooCalendarOccurrenceSource : ICachedCalendarOccurrenceSou
         {
             selected = SelectedCalendars();
         }
-        catch (ArgumentException exception)
+        catch (UriFormatException exception)
         {
             logger.Log("calendar-query", "invalid-saved-calendar", exception: exception);
             throw InvalidCalendarSettings(exception);
@@ -170,12 +173,6 @@ public sealed class YahooCalendarOccurrenceSource : ICachedCalendarOccurrenceSou
             logger.Log("calendar-query", exception.Kind.ToString(), exception: exception);
             throw YahooConnectionService.MapFailure(exception);
         }
-        catch (ArgumentException exception)
-        {
-            logger.Log("calendar-query", "invalid-saved-calendar", exception: exception);
-            throw InvalidCalendarSettings(exception);
-        }
-
         var result = new CalendarLoadResult(
             queryResult.Occurrences,
             DateTimeOffset.Now,
@@ -218,21 +215,13 @@ public sealed class YahooCalendarOccurrenceSource : ICachedCalendarOccurrenceSou
             var selectedIds = previouslySelected
                 .Select(calendar => calendar.Id)
                 .ToHashSet(StringComparer.Ordinal);
-            var selectedNames = previouslySelected
-                .Select(calendar => calendar.DisplayName)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            settings = settings with
-            {
-                Calendars = discovered.Select(calendar => new SavedCalendar(
-                    calendar.Id,
+            var recoveredEverySelection = previouslySelected.All(previous => discovered.Any(calendar =>
+                string.Equals(calendar.Id, previous.Id, StringComparison.Ordinal)
+                || string.Equals(
                     calendar.DisplayName,
-                    calendar.Uri.AbsoluteUri,
-                    calendar.Color,
-                    selectedIds.Contains(calendar.Id) || selectedNames.Contains(calendar.DisplayName)))
-                    .ToArray(),
-            };
-            var selected = settings.Calendars.Where(calendar => calendar.IsSelected).ToArray();
-            if (selected.Length != previouslySelected.Length)
+                    previous.DisplayName,
+                    StringComparison.OrdinalIgnoreCase)));
+            if (!recoveredEverySelection)
             {
                 throw new CalendarLoadException(
                     CalendarLoadFailureKind.Protocol,
@@ -240,6 +229,20 @@ public sealed class YahooCalendarOccurrenceSource : ICachedCalendarOccurrenceSou
                     "Rediscovery did not recover every previously selected calendar collection.");
             }
 
+            settings = settings with
+            {
+                Calendars = discovered.Select(calendar => new SavedCalendar(
+                    calendar.Id,
+                    calendar.DisplayName,
+                    calendar.Uri.AbsoluteUri,
+                    calendar.Color,
+                    selectedIds.Contains(calendar.Id)
+                        || previouslySelected.Any(previous => string.Equals(
+                            calendar.DisplayName,
+                            previous.DisplayName,
+                            StringComparison.OrdinalIgnoreCase))))
+                    .ToArray(),
+            };
             await settingsStore.SaveAsync(settings, cancellationToken);
             Calendars = settings.Calendars.Select(calendar => calendar.ToCalendarSource()).ToArray();
             return SelectedCalendars();
@@ -273,11 +276,22 @@ public sealed class YahooCalendarOccurrenceSource : ICachedCalendarOccurrenceSou
         .Select(calendar => new CalDavCalendar(
             calendar.Id,
             calendar.DisplayName,
-            new Uri(calendar.Uri, UriKind.Absolute),
+            ParseCalendarUri(calendar.Uri),
             calendar.Color))
         .ToArray();
 
-    private static CalendarLoadException InvalidCalendarSettings(ArgumentException exception) => new(
+    private static Uri ParseCalendarUri(string value)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)
+            || !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new UriFormatException("A saved calendar address is not an absolute HTTPS URI.");
+        }
+
+        return uri;
+    }
+
+    private static CalendarLoadException InvalidCalendarSettings(UriFormatException exception) => new(
         CalendarLoadFailureKind.Protocol,
         "A saved Yahoo calendar address is invalid. Reconnect the account and try again.",
         exception.GetType().Name,

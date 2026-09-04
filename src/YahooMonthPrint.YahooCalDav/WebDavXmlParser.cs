@@ -34,9 +34,8 @@ internal static partial class WebDavXmlParser
         var calendars = new List<CalDavCalendar>();
         foreach (var response in document.Descendants(Dav + "response"))
         {
-            var prop = SuccessfulProperties(response).FirstOrDefault();
-            if (prop is null
-                || !prop.Elements(Dav + "resourcetype")
+            var props = SuccessfulProperties(response).ToArray();
+            if (!props.SelectMany(prop => prop.Elements(Dav + "resourcetype"))
                     .Elements(CalDav + "calendar")
                     .Any())
             {
@@ -50,8 +49,14 @@ internal static partial class WebDavXmlParser
             }
 
             var uri = ResolveHref(responseUri, href);
-            var displayName = prop.Element(Dav + "displayname")?.Value.Trim();
-            var color = NormalizeColor(prop.Element(Apple + "calendar-color")?.Value.Trim());
+            var displayName = props
+                .Elements(Dav + "displayname")
+                .Select(element => element.Value.Trim())
+                .FirstOrDefault(value => value.Length > 0);
+            var color = NormalizeColor(props
+                .Elements(Apple + "calendar-color")
+                .Select(element => element.Value.Trim())
+                .FirstOrDefault(value => value.Length > 0));
             calendars.Add(new CalDavCalendar(
                 StableId(uri),
                 string.IsNullOrWhiteSpace(displayName) ? Uri.UnescapeDataString(uri.Segments[^1].Trim('/')) : displayName,
