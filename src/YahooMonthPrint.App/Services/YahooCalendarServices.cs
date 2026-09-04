@@ -146,9 +146,13 @@ public sealed class YahooCalendarOccurrenceSource : ICachedCalendarOccurrenceSou
         {
             selected = SelectedCalendars();
         }
-        catch (UriFormatException exception)
+        catch (InvalidSavedCalendarException exception)
         {
-            logger.Log("calendar-query", "invalid-saved-calendar", exception: exception);
+            logger.Log(
+                "calendar-query",
+                "invalid-saved-calendar",
+                $"{exception.CalendarId}:{exception.CalendarName}",
+                exception);
             throw InvalidCalendarSettings(exception);
         }
 
@@ -243,6 +247,19 @@ public sealed class YahooCalendarOccurrenceSource : ICachedCalendarOccurrenceSou
                             StringComparison.OrdinalIgnoreCase))))
                     .ToArray(),
             };
+            var ambiguousNames = previouslySelected
+                .Select(calendar => calendar.DisplayName)
+                .Where(name => discovered.Count(calendar => string.Equals(
+                    calendar.DisplayName,
+                    name,
+                    StringComparison.OrdinalIgnoreCase)) > 1)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var calendar in settings.Calendars.Where(calendar =>
+                calendar.IsSelected && ambiguousNames.Contains(calendar.DisplayName)))
+            {
+                logger.Log("rediscovery", "ambiguous-name-selection", calendar.Id);
+            }
+
             await settingsStore.SaveAsync(settings, cancellationToken);
             Calendars = settings.Calendars.Select(calendar => calendar.ToCalendarSource()).ToArray();
             return SelectedCalendars();
@@ -276,16 +293,16 @@ public sealed class YahooCalendarOccurrenceSource : ICachedCalendarOccurrenceSou
         .Select(calendar => new CalDavCalendar(
             calendar.Id,
             calendar.DisplayName,
-            ParseCalendarUri(calendar.Uri),
+            ParseCalendarUri(calendar),
             calendar.Color))
         .ToArray();
 
-    private static Uri ParseCalendarUri(string value)
+    private static Uri ParseCalendarUri(SavedCalendar calendar)
     {
-        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)
+        if (!Uri.TryCreate(calendar.Uri, UriKind.Absolute, out var uri)
             || !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
         {
-            throw new UriFormatException("A saved calendar address is not an absolute HTTPS URI.");
+            throw new InvalidSavedCalendarException(calendar.Id, calendar.DisplayName);
         }
 
         return uri;
@@ -296,6 +313,14 @@ public sealed class YahooCalendarOccurrenceSource : ICachedCalendarOccurrenceSou
         "A saved Yahoo calendar address is invalid. Reconnect the account and try again.",
         exception.GetType().Name,
         exception);
+
+    private sealed class InvalidSavedCalendarException(string calendarId, string calendarName)
+        : UriFormatException("A saved calendar address is not an absolute HTTPS URI.")
+    {
+        public string CalendarId { get; } = calendarId;
+
+        public string CalendarName { get; } = calendarName;
+    }
 }
 
 public sealed class YahooAccountService(

@@ -165,12 +165,12 @@ public sealed class YahooCalDavClient : IYahooCalDavClient
                     calendarData,
                     range));
             }
-            catch (Exception exception) when (IsResourceParseFailure(exception))
+            catch (CalendarResourceException exception)
             {
                 issues.Add(new CalDavResourceIssue(
                     calendar.Id,
                     resourceId,
-                    exception.GetType().Name));
+                    exception.SourceExceptionType));
             }
         }
 
@@ -270,8 +270,4 @@ public sealed class YahooCalDavClient : IYahooCalDavClient
         }
     }
 
-    private static bool IsResourceParseFailure(Exception exception) => exception is not
-        OutOfMemoryException
-        and not AccessViolationException
-        and not StackOverflowException;
 }

@@ -1,3 +1,4 @@
+using System.Runtime.Serialization;
 using Ical.Net;
 using Ical.Net.CalendarComponents;
 using Ical.Net.DataTypes;
@@ -19,27 +20,32 @@ public sealed class IcsOccurrenceParser(TimeZoneInfo viewerTimeZone)
         ArgumentException.ThrowIfNullOrWhiteSpace(calendarData);
         ArgumentNullException.ThrowIfNull(range);
 
-        var calendar = Calendar.Load(calendarData)
-            ?? throw new FormatException("The calendar resource did not contain a VCALENDAR.");
-        var rangeStartUtc = LocalTimeBoundary.ToUtc(range.Start, viewerTimeZone);
-        var rangeEndUtc = LocalTimeBoundary.ToUtc(range.EndExclusive, viewerTimeZone);
-        var longestDuration = calendar.Events
-            .Select(GetDuration)
-            .DefaultIfEmpty(TimeSpan.Zero)
-            .Max();
-        var evaluationStartUtc = rangeStartUtc - longestDuration;
-        var occurrences = calendar
-            .GetOccurrences(new CalDateTime(evaluationStartUtc), new EvaluationOptions())
-            .TakeWhile(occurrence => AsUtc(occurrence.Period.StartTime) < rangeEndUtc)
-            .Select(occurrence => ConvertOccurrence(calendarId, resourceId, occurrence))
-            .Where(occurrence => occurrence is not null)
-            .Cast<CalendarOccurrence>()
-            .Where(occurrence => Overlaps(occurrence, range))
-            .DistinctBy(occurrence => occurrence.Key)
-            .Order(OccurrenceComparer.Instance)
-            .ToArray();
-
-        return occurrences;
+        try
+        {
+            var calendar = Calendar.Load(calendarData)
+                ?? throw new FormatException("The calendar resource did not contain a VCALENDAR.");
+            var rangeStartUtc = LocalTimeBoundary.ToUtc(range.Start, viewerTimeZone);
+            var rangeEndUtc = LocalTimeBoundary.ToUtc(range.EndExclusive, viewerTimeZone);
+            var longestDuration = calendar.Events
+                .Select(GetDuration)
+                .DefaultIfEmpty(TimeSpan.Zero)
+                .Max();
+            var evaluationStartUtc = rangeStartUtc - longestDuration;
+            return calendar
+                .GetOccurrences(new CalDateTime(evaluationStartUtc), new EvaluationOptions())
+                .TakeWhile(occurrence => AsUtc(occurrence.Period.StartTime) < rangeEndUtc)
+                .Select(occurrence => ConvertOccurrence(calendarId, resourceId, occurrence))
+                .Where(occurrence => occurrence is not null)
+                .Cast<CalendarOccurrence>()
+                .Where(occurrence => Overlaps(occurrence, range))
+                .DistinctBy(occurrence => occurrence.Key)
+                .Order(OccurrenceComparer.Instance)
+                .ToArray();
+        }
+        catch (Exception exception) when (IsMalformedCalendarData(exception))
+        {
+            throw new CalendarResourceException(exception);
+        }
     }
 
     private CalendarOccurrence? ConvertOccurrence(
@@ -128,6 +134,14 @@ public sealed class IcsOccurrenceParser(TimeZoneInfo viewerTimeZone)
         }
     }
 
+    private static bool IsMalformedCalendarData(Exception exception) =>
+        exception is SerializationException
+            or FormatException
+            or OverflowException
+            or EvaluationException
+        || exception is ArgumentException
+            && exception.TargetSite?.DeclaringType?.Assembly == typeof(Calendar).Assembly;
+
     private static bool Overlaps(CalendarOccurrence occurrence, MonthGridRange range)
     {
         var start = range.Start.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
@@ -139,4 +153,15 @@ public sealed class IcsOccurrenceParser(TimeZoneInfo viewerTimeZone)
 
         return occurrence.Start.DateTime < end && occurrence.End.DateTime > start;
     }
+}
+
+internal sealed class CalendarResourceException : Exception
+{
+    public CalendarResourceException(Exception innerException)
+        : base("The iCalendar resource could not be parsed.", innerException)
+    {
+        SourceExceptionType = innerException.GetType().Name;
+    }
+
+    public string SourceExceptionType { get; }
 }

@@ -91,6 +91,9 @@ public sealed class YahooCalDavClientTests
             issue => issue.ResourceId == "https://calendar.example.test/college/bad.ics");
         Assert.Contains(
             result.ResourceIssues,
+            issue => issue.ExceptionType == "SerializationException");
+        Assert.Contains(
+            result.ResourceIssues,
             issue => issue.ExceptionType == "MissingCalendarData");
         var request = Assert.Single(handler.Requests);
         Assert.Equal("REPORT", request.Method);

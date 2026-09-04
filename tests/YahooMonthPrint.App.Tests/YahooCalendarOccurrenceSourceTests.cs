@@ -93,6 +93,7 @@ public sealed class YahooCalendarOccurrenceSourceTests : IDisposable
     [Fact]
     public async Task RediscoveryAllowsMultipleCollectionsMatchingOneSelectedDisplayName()
     {
+        var logger = new TrackingLogger();
         var client = new FakeClient
         {
             QueryException = new CalDavException(
@@ -112,7 +113,7 @@ public sealed class YahooCalendarOccurrenceSourceTests : IDisposable
                     new Uri("https://calendar.example.test/new-personal-2/")),
             ],
         };
-        var source = CreateSource(client);
+        var source = CreateSource(client, logger: logger);
 
         await source.LoadAsync(
             MonthGrid.Create(2026, 9),
@@ -121,6 +122,10 @@ public sealed class YahooCalendarOccurrenceSourceTests : IDisposable
         Assert.Equal(2, client.QueryCount);
         Assert.Equal(2, client.LastQueriedCalendars.Count);
         Assert.All(client.LastQueriedCalendars, calendar => Assert.Equal("College", calendar.DisplayName));
+        Assert.Contains(
+            logger.Entries,
+            entry => entry.Status == "ambiguous-name-selection"
+                && entry.ResourceId is "new-personal-1" or "new-personal-2");
     }
 
     [Fact]
@@ -150,6 +155,33 @@ public sealed class YahooCalendarOccurrenceSourceTests : IDisposable
         var result = await source.TryLoadCachedAsync(range, TestContext.Current.CancellationToken);
 
         Assert.Equal(occurrence, Assert.Single(Assert.IsType<CalendarLoadResult>(result).Occurrences));
+    }
+
+    [Fact]
+    public async Task InvalidSavedAddressLogsTheCalendarIdentityWithoutTheAddress()
+    {
+        var logger = new TrackingLogger();
+        var settings = new ApplicationSettings
+        {
+            YahooAccount = "student@example.test",
+            Calendars = [new SavedCalendar("college", "College", "not a URI", null, true)],
+        };
+        var source = new YahooCalendarOccurrenceSource(
+            settings,
+            new FakeCredentialStore("disposable-app-password"),
+            new JsonSettingsStore(directory),
+            new CalendarCacheStore(directory),
+            new FakeClientFactory(new FakeClient()),
+            logger);
+
+        var exception = await Assert.ThrowsAsync<CalendarLoadException>(() => source.LoadAsync(
+            MonthGrid.Create(2026, 9),
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(CalendarLoadFailureKind.Protocol, exception.Kind);
+        var entry = Assert.Single(logger.Entries);
+        Assert.Equal("invalid-saved-calendar", entry.Status);
+        Assert.Equal("college:College", entry.ResourceId);
     }
 
     [Fact]
@@ -186,7 +218,8 @@ public sealed class YahooCalendarOccurrenceSourceTests : IDisposable
     private YahooCalendarOccurrenceSource CreateSource(
         FakeClient client,
         ICalendarCacheStore? cache = null,
-        bool includePersonal = false)
+        bool includePersonal = false,
+        IAppLogger? logger = null)
     {
         var calendars = new List<SavedCalendar>
         {
@@ -218,7 +251,7 @@ public sealed class YahooCalendarOccurrenceSourceTests : IDisposable
             new JsonSettingsStore(directory),
             cache ?? new CalendarCacheStore(directory),
             new FakeClientFactory(client),
-            new NullAppLogger());
+            logger ?? new NullAppLogger());
     }
 
     private static CalendarOccurrence CreateOccurrence(string title = "Calculus II")
@@ -245,6 +278,17 @@ public sealed class YahooCalendarOccurrenceSourceTests : IDisposable
         public void Delete(string accountName)
         {
         }
+    }
+
+    private sealed class TrackingLogger : IAppLogger
+    {
+        public List<(string Status, string? ResourceId)> Entries { get; } = [];
+
+        public void Log(
+            string category,
+            string status,
+            string? resourceId = null,
+            Exception? exception = null) => Entries.Add((status, resourceId));
     }
 
     private sealed class FakeClientFactory(FakeClient client) : IYahooCalDavClientFactory
