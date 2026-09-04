@@ -57,9 +57,29 @@ function Resolve-InnoCompiler {
         $innoCandidates.Add($innoCommand.Source)
     }
 
-    $innoCandidates.Add((Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe'))
-    $innoCandidates.Add('C:\Program Files (x86)\Inno Setup 6\ISCC.exe')
-    $innoCandidates.Add('C:\Program Files\Inno Setup 6\ISCC.exe')
+    $innoSearchRoots = [System.Collections.Generic.List[string]]::new()
+    if (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+        $innoSearchRoots.Add((Join-Path $env:LOCALAPPDATA 'Programs'))
+    }
+    if (-not [string]::IsNullOrWhiteSpace(${env:ProgramFiles(x86)})) {
+        $innoSearchRoots.Add(${env:ProgramFiles(x86)})
+    }
+    if (-not [string]::IsNullOrWhiteSpace($env:ProgramFiles)) {
+        $innoSearchRoots.Add($env:ProgramFiles)
+    }
+
+    foreach ($innoSearchRoot in ($innoSearchRoots | Select-Object -Unique)) {
+        if (-not (Test-Path -LiteralPath $innoSearchRoot -PathType Container)) {
+            continue
+        }
+
+        $versionedInstallDirectories = Get-ChildItem -LiteralPath $innoSearchRoot -Directory -ErrorAction SilentlyContinue |
+            Where-Object Name -Match '^Inno Setup \d+$' |
+            Sort-Object { [int]($_.Name -replace '^Inno Setup ', '') } -Descending
+        foreach ($installDirectory in $versionedInstallDirectories) {
+            $innoCandidates.Add((Join-Path $installDirectory.FullName 'ISCC.exe'))
+        }
+    }
 
     foreach ($innoCandidate in ($innoCandidates | Select-Object -Unique)) {
         if (-not (Test-Path -LiteralPath $innoCandidate -PathType Leaf)) {
@@ -67,7 +87,7 @@ function Resolve-InnoCompiler {
         }
 
         $innoBanner = Get-InnoCompilerBanner -CompilerPath $innoCandidate
-        if ($innoBanner -match 'Inno Setup 6 Command-Line Compiler') {
+        if ($innoBanner -match 'Inno Setup \d+ Command-Line Compiler') {
             return $innoCandidate
         }
     }

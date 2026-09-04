@@ -65,7 +65,7 @@ if (-not $BuildToolsOnly) {
 
     $innoCompilerPath = Resolve-InnoCompiler
     if ([string]::IsNullOrWhiteSpace($innoCompilerPath)) {
-        $toolFailures.Add('Inno Setup 6 compiler (ISCC.exe) was not found.')
+        $toolFailures.Add('Inno Setup compiler (ISCC.exe) was not found.')
     }
     else {
         $installerScript = Join-Path (Split-Path -Parent $PSScriptRoot) 'installer\smoke\YahooMonthPrint.ToolchainSmoke.iss'
