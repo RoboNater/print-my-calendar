@@ -14,7 +14,7 @@ public sealed class MainWindowViewModelTests
     {
         using var viewModel = CreateViewModel();
 
-        await viewModel.InitializeAsync();
+        await viewModel.RefreshAsync();
 
         Assert.Equal("September 2026", viewModel.DisplayedMonthLabel);
         Assert.Equal(35, viewModel.Days.Count);
@@ -30,7 +30,7 @@ public sealed class MainWindowViewModelTests
     public async Task HideCommandHidesOnlyOneRecurringOccurrenceAndRestoreShowsIt()
     {
         using var viewModel = CreateViewModel();
-        await viewModel.InitializeAsync();
+        await viewModel.RefreshAsync();
         var calculus = AllVisible(viewModel).First(item => item.Title == "Calculus II");
         var originalCalculusCount = AllVisible(viewModel).Count(item => item.Title == "Calculus II");
 
@@ -51,7 +51,7 @@ public sealed class MainWindowViewModelTests
     public async Task DebouncedFilterUsesLatestTextAndBothModes()
     {
         using var viewModel = CreateViewModel();
-        await viewModel.InitializeAsync();
+        await viewModel.RefreshAsync();
         viewModel.IsShowOnlyMatching = true;
 
         viewModel.FilterText = "office";
@@ -72,7 +72,7 @@ public sealed class MainWindowViewModelTests
     public async Task CalendarAndTitleOptionsUpdateAuthoritativeVisibleSet()
     {
         using var viewModel = CreateViewModel();
-        await viewModel.InitializeAsync();
+        await viewModel.RefreshAsync();
         var originalCount = viewModel.VisibleOccurrenceCount;
 
         viewModel.CalendarFilters.Single(item => item.Name == "Personal").IsEnabled = false;
@@ -92,7 +92,7 @@ public sealed class MainWindowViewModelTests
             new FakeCalendarOccurrenceSource(),
             new DateOnly(2026, 12, 1),
             TimeSpan.FromMilliseconds(1));
-        await viewModel.InitializeAsync();
+        await viewModel.RefreshAsync();
 
         await viewModel.NavigateAsync(1);
 
@@ -107,7 +107,7 @@ public sealed class MainWindowViewModelTests
     {
         var source = new ControllableSource();
         using var viewModel = new MainWindowViewModel(source, September);
-        var firstLoad = viewModel.InitializeAsync();
+        var firstLoad = viewModel.RefreshAsync();
         await source.FirstRequestStarted.Task;
 
         var navigation = viewModel.NavigateAsync(1);
@@ -126,10 +126,11 @@ public sealed class MainWindowViewModelTests
             September,
             TimeSpan.FromMilliseconds(1));
 
-        await viewModel.InitializeAsync();
+        await viewModel.RefreshAsync();
 
         Assert.False(viewModel.IsLoading);
         Assert.Contains("unexpected error", viewModel.StatusText, StringComparison.OrdinalIgnoreCase);
+        Assert.IsType<InvalidOperationException>(viewModel.LastTechnicalError);
     }
 
     [Fact]
@@ -153,7 +154,7 @@ public sealed class MainWindowViewModelTests
             new FixedSource([beforeGrid, inMonth]),
             September);
 
-        await viewModel.InitializeAsync();
+        await viewModel.RefreshAsync();
 
         Assert.Equal(2, viewModel.VisibleOccurrenceCount);
         Assert.Equal(3, CountDaysContaining(viewModel, "Conference"));
@@ -164,13 +165,14 @@ public sealed class MainWindowViewModelTests
     public async Task HiddenItemsRemainDiscoverableAcrossMonthNavigation()
     {
         using var viewModel = CreateViewModel();
-        await viewModel.InitializeAsync();
+        await viewModel.RefreshAsync();
         AllVisible(viewModel).Single(item => item.Title == "Doctor appointment").HideCommand.Execute(null);
 
         await viewModel.NavigateAsync(2);
 
         Assert.Single(viewModel.HiddenOccurrences);
         Assert.Equal("Hidden items (1)", viewModel.HiddenCountLabel);
+        Assert.Contains("2026", viewModel.HiddenOccurrences[0].Label, StringComparison.Ordinal);
         Assert.True(viewModel.RestoreAllCommand.CanExecute(null));
 
         viewModel.RestoreAllCommand.Execute(null);
@@ -183,7 +185,7 @@ public sealed class MainWindowViewModelTests
     public async Task HideAllTitlesRebuildsTheCalendarOnlyOnce()
     {
         using var viewModel = CreateViewModel();
-        await viewModel.InitializeAsync();
+        await viewModel.RefreshAsync();
         var resetCount = 0;
         viewModel.Days.CollectionChanged += (_, eventArgs) =>
         {
@@ -199,6 +201,42 @@ public sealed class MainWindowViewModelTests
         Assert.Equal(0, viewModel.VisibleOccurrenceCount);
     }
 
+    [Fact]
+    public async Task SupersededFailureCannotOverwriteNewerSuccessfulStatus()
+    {
+        var source = new LateFailingSource();
+        using var viewModel = new MainWindowViewModel(source, September);
+        var oldLoad = viewModel.RefreshAsync();
+        await source.FirstRequestStarted.Task;
+
+        await viewModel.NavigateAsync(1);
+        var successfulStatus = viewModel.StatusText;
+        source.ReleaseFirstFailure.SetResult();
+        await oldLoad;
+
+        Assert.Equal("October 2026", viewModel.DisplayedMonthLabel);
+        Assert.Equal(successfulStatus, viewModel.StatusText);
+        Assert.Null(viewModel.LastTechnicalError);
+    }
+
+    [Fact]
+    public async Task RefreshUpdatesRetainedHiddenOccurrenceDetails()
+    {
+        var recurrenceId = new DateTimeOffset(2026, 9, 18, 9, 0, 0, TimeSpan.Zero);
+        var source = new MutableSource(CreateMutableOccurrence("Original title", recurrenceId, recurrenceId));
+        using var viewModel = new MainWindowViewModel(source, September);
+        await viewModel.RefreshAsync();
+        AllVisible(viewModel).Single().HideCommand.Execute(null);
+        source.Occurrence = CreateMutableOccurrence("Updated title", recurrenceId.AddHours(2), recurrenceId);
+
+        await viewModel.RefreshAsync();
+
+        Assert.Single(viewModel.HiddenOccurrences);
+        Assert.Contains("Updated title", viewModel.HiddenOccurrences[0].Label, StringComparison.Ordinal);
+        Assert.Contains("11:00 AM", viewModel.HiddenOccurrences[0].Label, StringComparison.Ordinal);
+        Assert.Contains("2026", viewModel.HiddenOccurrences[0].Label, StringComparison.Ordinal);
+    }
+
     private static MainWindowViewModel CreateViewModel() => new(
         new FakeCalendarOccurrenceSource(),
         September,
@@ -209,6 +247,18 @@ public sealed class MainWindowViewModelTests
 
     private static int CountDaysContaining(MainWindowViewModel viewModel, string title) =>
         viewModel.Days.Count(day => day.Occurrences.Any(item => item.Title == title));
+
+    private static CalendarOccurrence CreateMutableOccurrence(
+        string title,
+        DateTimeOffset start,
+        DateTimeOffset recurrenceId) => new(
+            "college",
+            "mutable-series",
+            start,
+            start.AddHours(1),
+            false,
+            title,
+            recurrenceId: recurrenceId);
 
     private sealed class FixedSource(IReadOnlyList<CalendarOccurrence> occurrences)
         : ICalendarOccurrenceSource
@@ -234,6 +284,66 @@ public sealed class MainWindowViewModelTests
         {
             _ = range;
             throw new InvalidOperationException("Synthetic unexpected failure");
+        }
+    }
+
+    private sealed class MutableSource(CalendarOccurrence occurrence) : ICalendarOccurrenceSource
+    {
+        public IReadOnlyList<CalendarSource> Calendars { get; } = [new("college", "College")];
+
+        public CalendarOccurrence Occurrence { get; set; } = occurrence;
+
+        public Task<IReadOnlyList<CalendarOccurrence>> LoadAsync(
+            MonthGridRange range,
+            CancellationToken cancellationToken)
+        {
+            _ = range;
+            return Task.FromResult<IReadOnlyList<CalendarOccurrence>>([Occurrence]);
+        }
+    }
+
+    private sealed class LateFailingSource : ICalendarOccurrenceSource
+    {
+        private int requests;
+
+        public IReadOnlyList<CalendarSource> Calendars { get; } = [new("college", "College")];
+
+        public TaskCompletionSource FirstRequestStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource ReleaseFirstFailure { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task<IReadOnlyList<CalendarOccurrence>> LoadAsync(
+            MonthGridRange range,
+            CancellationToken cancellationToken)
+        {
+            _ = cancellationToken;
+            if (Interlocked.Increment(ref requests) == 1)
+            {
+                FirstRequestStarted.SetResult();
+                await ReleaseFirstFailure.Task;
+                throw new InvalidOperationException("Late synthetic failure");
+            }
+
+            var start = new DateTimeOffset(
+                range.DisplayedMonth.Year,
+                range.DisplayedMonth.Month,
+                1,
+                9,
+                0,
+                0,
+                TimeSpan.Zero);
+            return
+            [
+                new CalendarOccurrence(
+                    "college",
+                    "newer-success",
+                    start,
+                    start.AddHours(1),
+                    false,
+                    "Newer successful result"),
+            ];
         }
     }
 

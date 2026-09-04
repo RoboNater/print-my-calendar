@@ -212,7 +212,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public Task PendingFilterUpdate => pendingFilterUpdate;
 
-    public async Task InitializeAsync() => await RefreshAsync();
+    public Exception? LastTechnicalError { get; private set; }
 
     public async Task NavigateAsync(int months) =>
         await NavigateToAsync(displayedMonth.AddMonths(months));
@@ -238,8 +238,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             }
 
             occurrenceSet = new MonthOccurrenceSet(occurrences);
+            SynchronizeHiddenOccurrenceDetails(occurrences);
             BuildTitleFilters();
             ApplyVisibility();
+            SetLastTechnicalError(null);
             StatusText = $"Sample schedule loaded at {DateTime.Now:t}";
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -247,11 +249,17 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
         catch (CalendarLoadException exception)
         {
-            StatusText = $"Sample schedule unavailable: {exception.Message}";
+            ReportLoadErrorIfCurrent(
+                version,
+                exception,
+                $"Sample schedule unavailable: {exception.Message}");
         }
         catch (Exception exception) when (IsRecoverable(exception))
         {
-            ReportUnexpectedError(exception);
+            ReportLoadErrorIfCurrent(
+                version,
+                exception,
+                "The sample schedule could not be loaded because of an unexpected error. Try again.");
         }
         finally
         {
@@ -470,8 +478,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         foreach (var occurrence in hiddenOccurrenceLookup.Values.Order(OccurrenceComparer.Instance))
         {
             var label = occurrence.IsAllDay
-                ? $"{occurrence.Title} — {occurrence.Start:MMM d}"
-                : $"{occurrence.Title} — {occurrence.Start:MMM d, h:mm tt}";
+                ? $"{occurrence.Title} — {occurrence.Start:MMM d, yyyy}"
+                : $"{occurrence.Title} — {occurrence.Start:MMM d, yyyy, h:mm tt}";
             HiddenOccurrences.Add(new HiddenOccurrenceViewModel(
                 occurrence,
                 label,
@@ -486,8 +494,33 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     private void ReportUnexpectedError(Exception exception)
     {
-        _ = exception;
+        SetLastTechnicalError(exception);
         StatusText = "The sample schedule could not be loaded because of an unexpected error. Try again.";
+    }
+
+    private void ReportLoadErrorIfCurrent(int version, Exception exception, string message)
+    {
+        if (version != loadVersion)
+        {
+            return;
+        }
+
+        SetLastTechnicalError(exception);
+        StatusText = message;
+    }
+
+    private void SetLastTechnicalError(Exception? exception)
+    {
+        LastTechnicalError = exception;
+        OnPropertyChanged(nameof(LastTechnicalError));
+    }
+
+    private void SynchronizeHiddenOccurrenceDetails(IEnumerable<CalendarOccurrence> occurrences)
+    {
+        foreach (var occurrence in occurrences.Where(item => state.HiddenOccurrences.Contains(item.Key)))
+        {
+            hiddenOccurrenceLookup[occurrence.Key] = occurrence;
+        }
     }
 
     private static bool IsRecoverable(Exception exception) =>

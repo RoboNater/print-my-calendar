@@ -42,6 +42,10 @@ Fetched occurrences remain available in memory while filters change. Screen and 
 
 Phase 2 realizes the first half of this flow with an `ICalendarOccurrenceSource` implemented by a deterministic offline sample. `MainWindowViewModel` retains the raw occurrence set, owns local view state, and delegates all filtering and detail projection to Core. The UI only renders that projected result; it does not duplicate visibility rules. Phase 3 will supply the production Yahoo implementation behind the same source boundary.
 
+Core treats the wall-clock components of timed `CalendarOccurrence.Start` and `End` values as already normalized to the Windows user's local timezone. The Yahoo layer must convert timed instants to that timezone before constructing Core occurrences while retaining the original zone identifier in `SourceTimeZoneId`; all-day dates are never shifted across timezone boundaries. Day bucketing, ordering, and displayed time therefore use the same normalized clock.
+
+`VisibleOccurrenceCount` counts logical occurrences after filtering. A multi-day occurrence may produce a card in several day cells but contributes one to this count, matching the user's number of events rather than the number of visual repetitions.
+
 ## Async and failure boundaries
 
 - Network, parsing, cache I/O, and substantial print generation must not block the WPF UI thread.
