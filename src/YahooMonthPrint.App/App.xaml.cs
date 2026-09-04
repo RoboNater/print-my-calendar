@@ -1,4 +1,6 @@
 using System.Windows;
+using YahooMonthPrint.App.Services;
+using YahooMonthPrint.App.ViewModels;
 
 namespace YahooMonthPrint.App;
 
@@ -21,8 +23,8 @@ public partial class App : Application
 
     private static MainWindow CreateMainWindow()
     {
-        // Keep object construction here. Later phases can replace concrete services
-        // with deterministic fakes without introducing a service-locator pattern.
-        return new MainWindow();
+        var source = new FakeCalendarOccurrenceSource();
+        var viewModel = new MainWindowViewModel(source);
+        return new MainWindow(viewModel);
     }
 }
