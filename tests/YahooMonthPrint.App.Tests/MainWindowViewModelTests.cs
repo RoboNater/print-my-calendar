@@ -134,6 +134,34 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task RefreshCommandExecutesTheProductionStartupPath()
+    {
+        using var viewModel = CreateViewModel();
+        var command = Assert.IsType<AsyncRelayCommand>(viewModel.RefreshCommand);
+
+        command.Execute(null);
+        await command.ExecutionTask;
+
+        Assert.True(viewModel.RawOccurrenceCount > 0);
+        Assert.False(viewModel.IsLoading);
+        Assert.Null(viewModel.LastTechnicalError);
+    }
+
+    [Fact]
+    public async Task RefreshCommandReportsUnexpectedFailureOutsideLoadBoundary()
+    {
+        var viewModel = CreateViewModel();
+        var command = Assert.IsType<AsyncRelayCommand>(viewModel.RefreshCommand);
+        viewModel.Dispose();
+
+        command.Execute(null);
+        await command.ExecutionTask;
+
+        Assert.IsType<ObjectDisposedException>(viewModel.LastTechnicalError);
+        Assert.Contains("unexpected error", viewModel.StatusText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task MultiDayOccurrencesRenderOnEveryOverlappingGridDate()
     {
         var beforeGrid = new CalendarOccurrence(
@@ -222,12 +250,15 @@ public sealed class MainWindowViewModelTests
     [Fact]
     public async Task RefreshUpdatesRetainedHiddenOccurrenceDetails()
     {
-        var recurrenceId = new DateTimeOffset(2026, 9, 18, 9, 0, 0, TimeSpan.Zero);
+        var recurrenceId = LocalAt(2026, 9, 18, 9);
         var source = new MutableSource(CreateMutableOccurrence("Original title", recurrenceId, recurrenceId));
         using var viewModel = new MainWindowViewModel(source, September);
         await viewModel.RefreshAsync();
         AllVisible(viewModel).Single().HideCommand.Execute(null);
-        source.Occurrence = CreateMutableOccurrence("Updated title", recurrenceId.AddHours(2), recurrenceId);
+        source.Occurrences =
+        [
+            CreateMutableOccurrence("Updated title", recurrenceId.AddHours(2), recurrenceId),
+        ];
 
         await viewModel.RefreshAsync();
 
@@ -235,6 +266,42 @@ public sealed class MainWindowViewModelTests
         Assert.Contains("Updated title", viewModel.HiddenOccurrences[0].Label, StringComparison.Ordinal);
         Assert.Contains("11:00 AM", viewModel.HiddenOccurrences[0].Label, StringComparison.Ordinal);
         Assert.Contains("2026", viewModel.HiddenOccurrences[0].Label, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RefreshRekeysUniquelyMovedNonRecurringHiddenOccurrence()
+    {
+        var start = LocalAt(2026, 9, 22, 14, 30);
+        var source = new MutableSource(CreateMutableOccurrence("Doctor appointment", start));
+        using var viewModel = new MainWindowViewModel(source, September);
+        await viewModel.RefreshAsync();
+        AllVisible(viewModel).Single().HideCommand.Execute(null);
+        source.Occurrences = [CreateMutableOccurrence("Doctor appointment", start.AddMinutes(30))];
+
+        await viewModel.RefreshAsync();
+
+        Assert.Empty(viewModel.VisibleOccurrences);
+        Assert.Empty(AllVisible(viewModel));
+        Assert.Single(viewModel.HiddenOccurrences);
+        Assert.Equal(start.AddMinutes(30), viewModel.HiddenOccurrences[0].Occurrence.Start);
+    }
+
+    [Fact]
+    public async Task RefreshPrunesHiddenOccurrenceDeletedFromLoadedRange()
+    {
+        var source = new MutableSource(CreateMutableOccurrence(
+            "Doctor appointment",
+            LocalAt(2026, 9, 22, 14, 30)));
+        using var viewModel = new MainWindowViewModel(source, September);
+        await viewModel.RefreshAsync();
+        AllVisible(viewModel).Single().HideCommand.Execute(null);
+        source.Occurrences = [];
+
+        await viewModel.RefreshAsync();
+
+        Assert.Empty(viewModel.HiddenOccurrences);
+        Assert.Equal("Hidden items (0)", viewModel.HiddenCountLabel);
+        Assert.False(viewModel.RestoreAllCommand.CanExecute(null));
     }
 
     private static MainWindowViewModel CreateViewModel() => new(
@@ -251,7 +318,7 @@ public sealed class MainWindowViewModelTests
     private static CalendarOccurrence CreateMutableOccurrence(
         string title,
         DateTimeOffset start,
-        DateTimeOffset recurrenceId) => new(
+        DateTimeOffset? recurrenceId = null) => new(
             "college",
             "mutable-series",
             start,
@@ -259,6 +326,17 @@ public sealed class MainWindowViewModelTests
             false,
             title,
             recurrenceId: recurrenceId);
+
+    private static DateTimeOffset LocalAt(
+        int year,
+        int month,
+        int day,
+        int hour,
+        int minute = 0)
+    {
+        var local = new DateTime(year, month, day, hour, minute, 0, DateTimeKind.Unspecified);
+        return new DateTimeOffset(local, TimeZoneInfo.Local.GetUtcOffset(local));
+    }
 
     private sealed class FixedSource(IReadOnlyList<CalendarOccurrence> occurrences)
         : ICalendarOccurrenceSource
@@ -291,14 +369,14 @@ public sealed class MainWindowViewModelTests
     {
         public IReadOnlyList<CalendarSource> Calendars { get; } = [new("college", "College")];
 
-        public CalendarOccurrence Occurrence { get; set; } = occurrence;
+        public IReadOnlyList<CalendarOccurrence> Occurrences { get; set; } = [occurrence];
 
         public Task<IReadOnlyList<CalendarOccurrence>> LoadAsync(
             MonthGridRange range,
             CancellationToken cancellationToken)
         {
             _ = range;
-            return Task.FromResult<IReadOnlyList<CalendarOccurrence>>([Occurrence]);
+            return Task.FromResult(Occurrences);
         }
     }
 
@@ -326,14 +404,11 @@ public sealed class MainWindowViewModelTests
                 throw new InvalidOperationException("Late synthetic failure");
             }
 
-            var start = new DateTimeOffset(
+            var start = LocalAt(
                 range.DisplayedMonth.Year,
                 range.DisplayedMonth.Month,
                 1,
-                9,
-                0,
-                0,
-                TimeSpan.Zero);
+                9);
             return
             [
                 new CalendarOccurrence(
@@ -377,14 +452,11 @@ public sealed class MainWindowViewModelTests
                 }
             }
 
-            var start = new DateTimeOffset(
+            var start = LocalAt(
                 range.DisplayedMonth.Year,
                 range.DisplayedMonth.Month,
                 1,
-                9,
-                0,
-                0,
-                TimeSpan.Zero);
+                9);
             return
             [
                 new CalendarOccurrence(

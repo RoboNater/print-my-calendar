@@ -7,8 +7,8 @@ public sealed class EventDisplayProjectionTests
     private static readonly CalendarOccurrence Occurrence = new(
         "college",
         "exam",
-        new DateTimeOffset(2026, 9, 14, 9, 0, 0, TimeSpan.Zero),
-        new DateTimeOffset(2026, 9, 14, 10, 0, 0, TimeSpan.Zero),
+        LocalAt(2026, 9, 14, 9),
+        LocalAt(2026, 9, 14, 10),
         false,
         "Calculus II",
         "EXAM 2\nChapters 5-7\nBring calculator\nBring student ID",
@@ -68,5 +68,11 @@ public sealed class EventDisplayProjectionTests
         var result = EventDisplayProjection.Create(allDay, new MonthViewState(new DateOnly(2026, 9, 1)));
 
         Assert.Empty(result.TimeText);
+    }
+
+    private static DateTimeOffset LocalAt(int year, int month, int day, int hour)
+    {
+        var local = new DateTime(year, month, day, hour, 0, 0, DateTimeKind.Unspecified);
+        return new DateTimeOffset(local, TimeZoneInfo.Local.GetUtcOffset(local));
     }
 }

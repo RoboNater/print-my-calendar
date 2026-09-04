@@ -23,6 +23,16 @@ public sealed record CalendarOccurrence
             throw new ArgumentOutOfRangeException(nameof(end), "An occurrence cannot end before it starts.");
         }
 
+        if (!isAllDay)
+        {
+            EnsureViewerLocal(start, nameof(start));
+            EnsureViewerLocal(end, nameof(end));
+            if (recurrenceId is { } value)
+            {
+                EnsureViewerLocal(value, nameof(recurrenceId));
+            }
+        }
+
         CalendarId = calendarId;
         Uid = uid;
         Start = start;
@@ -59,4 +69,14 @@ public sealed record CalendarOccurrence
     public string? SourceResourceId { get; }
 
     public OccurrenceKey Key => new(CalendarId, Uid, RecurrenceId ?? Start);
+
+    private static void EnsureViewerLocal(DateTimeOffset value, string parameterName)
+    {
+        if (value.Offset != value.ToLocalTime().Offset)
+        {
+            throw new ArgumentException(
+                "Timed occurrences must be normalized to the Windows user's local timezone.",
+                parameterName);
+        }
+    }
 }

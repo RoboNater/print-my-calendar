@@ -44,6 +44,8 @@ Phase 2 realizes the first half of this flow with an `ICalendarOccurrenceSource`
 
 Core treats the wall-clock components of timed `CalendarOccurrence.Start` and `End` values as already normalized to the Windows user's local timezone. The Yahoo layer must convert timed instants to that timezone before constructing Core occurrences while retaining the original zone identifier in `SourceTimeZoneId`; all-day dates are never shifted across timezone boundaries. Day bucketing, ordering, and displayed time therefore use the same normalized clock.
 
+The Core constructor rejects timed values whose offsets do not match the Windows local zone at those instants, so adapter mistakes fail at the normalization boundary instead of silently placing an event in the wrong day cell. Yahoo recurrence expansion must populate a normalized `RecurrenceId` for every recurring instance. Within an authoritative range reload, the view model can safely re-key one uniquely matched non-recurring calendar/UID whose time moved; ambiguous recurring instances are never guessed. Hidden occurrences missing from a reload of their former range are pruned as deleted.
+
 `VisibleOccurrenceCount` counts logical occurrences after filtering. A multi-day occurrence may produce a card in several day cells but contributes one to this count, matching the user's number of events rather than the number of visual repetitions.
 
 ## Async and failure boundaries

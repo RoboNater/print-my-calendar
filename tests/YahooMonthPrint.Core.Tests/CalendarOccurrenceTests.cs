@@ -7,8 +7,8 @@ public sealed class CalendarOccurrenceTests
     [Fact]
     public void KeyDistinguishesOccurrencesFromSameRecurringSeries()
     {
-        var first = Occurrence("series", new DateTimeOffset(2026, 9, 7, 9, 0, 0, TimeSpan.FromHours(-4)));
-        var second = Occurrence("series", new DateTimeOffset(2026, 9, 14, 9, 0, 0, TimeSpan.FromHours(-4)));
+        var first = Occurrence("series", LocalAt(2026, 9, 7, 9));
+        var second = Occurrence("series", LocalAt(2026, 9, 14, 9));
 
         Assert.NotEqual(first.Key, second.Key);
     }
@@ -16,7 +16,7 @@ public sealed class CalendarOccurrenceTests
     [Fact]
     public void KeyUsesRecurrenceIdForMovedOverride()
     {
-        var recurrenceId = new DateTimeOffset(2026, 9, 14, 9, 0, 0, TimeSpan.FromHours(-4));
+        var recurrenceId = LocalAt(2026, 9, 14, 9);
         var moved = new CalendarOccurrence(
             "college",
             "series",
@@ -48,7 +48,7 @@ public sealed class CalendarOccurrenceTests
     [Fact]
     public void ComparerPutsAllDayBeforeTimedOccurrences()
     {
-        var timed = Occurrence("timed", new DateTimeOffset(2026, 9, 7, 8, 0, 0, TimeSpan.Zero));
+        var timed = Occurrence("timed", LocalAt(2026, 9, 7, 8));
         var allDay = new CalendarOccurrence(
             "college",
             "all-day",
@@ -82,7 +82,7 @@ public sealed class CalendarOccurrenceTests
     [Fact]
     public void DateRangeIncludesZeroDurationOccurrenceOnItsStartDate()
     {
-        var start = new DateTimeOffset(2026, 9, 20, 9, 0, 0, TimeSpan.Zero);
+        var start = LocalAt(2026, 9, 20, 9);
         var occurrence = new CalendarOccurrence(
             "college",
             "reminder",
@@ -95,6 +95,26 @@ public sealed class CalendarOccurrenceTests
         Assert.False(OccurrenceDateRange.OccursOnDate(occurrence, new DateOnly(2026, 9, 21)));
     }
 
+    [Fact]
+    public void ConstructorRejectsTimedOccurrenceOutsideViewerLocalTimezone()
+    {
+        var local = LocalAt(2026, 9, 20, 9);
+        var nonLocalOffset = local.Offset == TimeSpan.FromHours(14)
+            ? TimeSpan.FromHours(-14)
+            : TimeSpan.FromHours(14);
+        var nonLocal = new DateTimeOffset(local.DateTime, nonLocalOffset);
+
+        var exception = Assert.Throws<ArgumentException>(() => new CalendarOccurrence(
+            "college",
+            "not-normalized",
+            nonLocal,
+            nonLocal.AddHours(1),
+            false,
+            "Wrong zone"));
+
+        Assert.Equal("start", exception.ParamName);
+    }
+
     private static CalendarOccurrence Occurrence(string uid, DateTimeOffset start) => new(
         "college",
         uid,
@@ -102,4 +122,10 @@ public sealed class CalendarOccurrenceTests
         start.AddHours(1),
         false,
         "Calculus II");
+
+    private static DateTimeOffset LocalAt(int year, int month, int day, int hour)
+    {
+        var local = new DateTime(year, month, day, hour, 0, 0, DateTimeKind.Unspecified);
+        return new DateTimeOffset(local, TimeZoneInfo.Local.GetUtcOffset(local));
+    }
 }

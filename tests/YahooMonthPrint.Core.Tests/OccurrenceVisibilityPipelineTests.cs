@@ -107,7 +107,7 @@ public sealed class OccurrenceVisibilityPipelineTests
         DateTimeOffset? start = null,
         string title = "Calculus II")
     {
-        var actualStart = start ?? new DateTimeOffset(2026, 9, 14, 9, 0, 0, TimeSpan.Zero);
+        var actualStart = start ?? LocalAt(2026, 9, 14, 9);
         return new CalendarOccurrence(
             "college",
             uid,
@@ -117,5 +117,11 @@ public sealed class OccurrenceVisibilityPipelineTests
             title,
             "EXAM 2",
             "Science 201");
+    }
+
+    private static DateTimeOffset LocalAt(int year, int month, int day, int hour)
+    {
+        var local = new DateTime(year, month, day, hour, 0, 0, DateTimeKind.Unspecified);
+        return new DateTimeOffset(local, TimeZoneInfo.Local.GetUtcOffset(local));
     }
 }

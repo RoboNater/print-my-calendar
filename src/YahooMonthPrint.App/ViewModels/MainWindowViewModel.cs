@@ -238,7 +238,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             }
 
             occurrenceSet = new MonthOccurrenceSet(occurrences);
-            SynchronizeHiddenOccurrenceDetails(occurrences);
+            SynchronizeHiddenOccurrenceDetails(occurrences, range);
             BuildTitleFilters();
             ApplyVisibility();
             SetLastTechnicalError(null);
@@ -515,13 +515,64 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(LastTechnicalError));
     }
 
-    private void SynchronizeHiddenOccurrenceDetails(IEnumerable<CalendarOccurrence> occurrences)
+    private void SynchronizeHiddenOccurrenceDetails(
+        IReadOnlyList<CalendarOccurrence> occurrences,
+        MonthGridRange loadedRange)
     {
-        foreach (var occurrence in occurrences.Where(item => state.HiddenOccurrences.Contains(item.Key)))
+        var hiddenKeys = state.HiddenOccurrences.ToHashSet();
+        var nonRecurringHiddenIdentityCounts = state.HiddenOccurrences
+            .Select(key => hiddenOccurrenceLookup.GetValueOrDefault(key))
+            .Where(item => item is { RecurrenceId: null })
+            .GroupBy(item => (item!.CalendarId, item.Uid))
+            .ToDictionary(group => group.Key, group => group.Count());
+        foreach (var hiddenKey in state.HiddenOccurrences)
         {
-            hiddenOccurrenceLookup[occurrence.Key] = occurrence;
+            if (!hiddenOccurrenceLookup.TryGetValue(hiddenKey, out var hiddenOccurrence))
+            {
+                hiddenKeys.Remove(hiddenKey);
+                continue;
+            }
+
+            var exactMatch = occurrences.FirstOrDefault(item => item.Key == hiddenKey);
+            if (exactMatch is not null)
+            {
+                hiddenOccurrenceLookup[hiddenKey] = exactMatch;
+                continue;
+            }
+
+            if (!OverlapsLoadedRange(hiddenOccurrence, loadedRange))
+            {
+                continue;
+            }
+
+            var movedCandidates = hiddenOccurrence.RecurrenceId is null
+                ? occurrences
+                    .Where(item =>
+                        item.RecurrenceId is null
+                        && item.CalendarId == hiddenOccurrence.CalendarId
+                        && item.Uid == hiddenOccurrence.Uid)
+                    .ToArray()
+                : [];
+            var matchingHiddenCount = nonRecurringHiddenIdentityCounts.GetValueOrDefault(
+                (hiddenOccurrence.CalendarId, hiddenOccurrence.Uid));
+
+            hiddenOccurrenceLookup.Remove(hiddenKey);
+            hiddenKeys.Remove(hiddenKey);
+            if (movedCandidates.Length == 1 && matchingHiddenCount == 1)
+            {
+                var moved = movedCandidates[0];
+                hiddenOccurrenceLookup[moved.Key] = moved;
+                hiddenKeys.Add(moved.Key);
+            }
         }
+
+        state = state with { HiddenOccurrences = hiddenKeys };
     }
+
+    private static bool OverlapsLoadedRange(
+        CalendarOccurrence occurrence,
+        MonthGridRange loadedRange) =>
+        loadedRange.Dates.Any(date => OccurrenceDateRange.OccursOnDate(occurrence, date));
 
     private static bool IsRecoverable(Exception exception) =>
         exception is not OutOfMemoryException and not AccessViolationException;

@@ -20,9 +20,15 @@ public sealed class AsyncRelayCommand : ICommand
 
     public event EventHandler? CanExecuteChanged;
 
+    public Task ExecutionTask { get; private set; } = Task.CompletedTask;
+
     public bool CanExecute(object? parameter) => canExecute?.Invoke() ?? true;
 
-    public async void Execute(object? parameter)
+    public void Execute(object? parameter) => ExecutionTask = ExecuteAsync();
+
+    public void NotifyCanExecuteChanged() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+
+    private async Task ExecuteAsync()
     {
         try
         {
@@ -33,8 +39,6 @@ public sealed class AsyncRelayCommand : ICommand
             handleException(exception);
         }
     }
-
-    public void NotifyCanExecuteChanged() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
 
     private static bool IsRecoverable(Exception exception) =>
         exception is not OutOfMemoryException and not AccessViolationException;
