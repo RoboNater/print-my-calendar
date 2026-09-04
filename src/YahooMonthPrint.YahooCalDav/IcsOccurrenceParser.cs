@@ -1,0 +1,120 @@
+using Ical.Net;
+using Ical.Net.CalendarComponents;
+using Ical.Net.DataTypes;
+using Ical.Net.Evaluation;
+using YahooMonthPrint.Core;
+
+namespace YahooMonthPrint.YahooCalDav;
+
+public sealed class IcsOccurrenceParser(TimeZoneInfo viewerTimeZone)
+{
+    public IReadOnlyList<CalendarOccurrence> Parse(
+        string calendarId,
+        string resourceId,
+        string calendarData,
+        MonthGridRange range)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(calendarId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(resourceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(calendarData);
+        ArgumentNullException.ThrowIfNull(range);
+
+        var calendar = Calendar.Load(calendarData)
+            ?? throw new FormatException("The calendar resource did not contain a VCALENDAR.");
+        var rangeStart = range.Start.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
+        var rangeEnd = range.EndExclusive.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
+        var longestDuration = calendar.Events
+            .Select(GetDuration)
+            .DefaultIfEmpty(TimeSpan.Zero)
+            .Max();
+        var evaluationStart = rangeStart - longestDuration;
+        var occurrences = calendar
+            .GetOccurrences(new CalDateTime(evaluationStart), new EvaluationOptions())
+            .TakeWhile(occurrence => occurrence.Period.StartTime.Value < rangeEnd)
+            .Select(occurrence => ConvertOccurrence(calendarId, resourceId, occurrence))
+            .Where(occurrence => occurrence is not null)
+            .Cast<CalendarOccurrence>()
+            .Where(occurrence => Overlaps(occurrence, range))
+            .DistinctBy(occurrence => occurrence.Key)
+            .Order(OccurrenceComparer.Instance)
+            .ToArray();
+
+        return occurrences;
+    }
+
+    private CalendarOccurrence? ConvertOccurrence(
+        string calendarId,
+        string resourceId,
+        Occurrence occurrence)
+    {
+        if (occurrence.Source is not CalendarEvent calendarEvent
+            || !calendarEvent.IsActive
+            || string.Equals(calendarEvent.Status, "CANCELLED", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var period = occurrence.Period;
+        var isAllDay = calendarEvent.IsAllDay || !period.StartTime.HasTime;
+        var start = ConvertDateTime(period.StartTime, isAllDay);
+        var effectiveEnd = period.EffectiveEndTime ?? period.StartTime;
+        var end = ConvertDateTime(effectiveEnd, isAllDay);
+        var isRecurring = calendarEvent.RecurrenceIdentifier is not null
+            || calendarEvent.RecurrenceRule is not null
+            || calendarEvent.RecurrenceDates.GetAllDates().Any()
+            || calendarEvent.RecurrenceDates.GetAllPeriods().Any();
+        DateTimeOffset? recurrenceId = calendarEvent.RecurrenceIdentifier?.StartTime is { } overriddenId
+            ? ConvertDateTime(overriddenId, isAllDay)
+            : isRecurring ? start : null;
+        if (string.IsNullOrWhiteSpace(calendarEvent.Uid))
+        {
+            throw new FormatException("A VEVENT did not contain a UID.");
+        }
+
+        return new CalendarOccurrence(
+            calendarId,
+            calendarEvent.Uid,
+            start,
+            end,
+            isAllDay,
+            calendarEvent.Summary ?? string.Empty,
+            calendarEvent.Description,
+            calendarEvent.Location,
+            recurrenceId,
+            period.StartTime.TzId,
+            resourceId);
+    }
+
+    private DateTimeOffset ConvertDateTime(CalDateTime value, bool isAllDay)
+    {
+        if (isAllDay || value.IsFloating)
+        {
+            var local = DateTime.SpecifyKind(value.Value, DateTimeKind.Unspecified);
+            return new DateTimeOffset(local, viewerTimeZone.GetUtcOffset(local));
+        }
+
+        var utc = DateTime.SpecifyKind(value.AsUtc, DateTimeKind.Utc);
+        return TimeZoneInfo.ConvertTime(new DateTimeOffset(utc), viewerTimeZone);
+    }
+
+    private static TimeSpan GetDuration(CalendarEvent calendarEvent)
+    {
+        try
+        {
+            return calendarEvent.DtStart is null
+                ? TimeSpan.Zero
+                : calendarEvent.EffectiveDuration.ToTimeSpan(calendarEvent.DtStart).Duration();
+        }
+        catch (ArgumentException)
+        {
+            return TimeSpan.Zero;
+        }
+    }
+
+    private static bool Overlaps(CalendarOccurrence occurrence, MonthGridRange range)
+    {
+        var start = range.Start.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
+        var end = range.EndExclusive.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
+        return occurrence.Start.DateTime < end && occurrence.End.DateTime > start;
+    }
+}
