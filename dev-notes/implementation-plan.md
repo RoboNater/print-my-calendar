@@ -63,7 +63,7 @@ Document and validate the following prerequisites in `docs/development.md`:
 - Git and the GitHub CLI for the branch/PR workflow;
 - .NET 8 SDK with the Windows Desktop/WPF targeting pack;
 - Visual Studio 2022 Community or Build Tools with the .NET desktop build tools when an IDE/full MSBuild environment is needed;
-- Inno Setup 6 and its `ISCC.exe` compiler;
+- Inno Setup 6.3 or newer and its `ISCC.exe` compiler;
 - a Windows PDF printer or physical printer for later print-dialog validation;
 - a clean non-administrator Windows account or disposable Windows VM/Sandbox for installer acceptance testing;
 - optional Authenticode tooling (`signtool.exe`) for a supplied certificate, without requiring signing for local development.

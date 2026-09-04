@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\YahooMonthPrint.Core\YahooMonthPrint.Core.csproj" />
+    <ProjectReference Include="..\YahooMonthPrint.YahooCalDav\YahooMonthPrint.YahooCalDav.csproj" />
+    <ProjectReference Include="..\YahooMonthPrint.Printing\YahooMonthPrint.Printing.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+</Project>

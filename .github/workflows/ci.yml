@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test-publish:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+
+      - name: Verify required build tools
+        shell: pwsh
+        run: ./eng/verify-tools.ps1 -BuildToolsOnly
+
+      - name: Restore locked dependencies
+        run: dotnet restore YahooMonthPrint.sln --locked-mode
+
+      - name: Verify formatting
+        run: dotnet format YahooMonthPrint.sln --verify-no-changes --no-restore
+
+      - name: Build
+        run: dotnet build YahooMonthPrint.sln --configuration Release --no-restore
+
+      - name: Test with coverage
+        run: dotnet test YahooMonthPrint.sln --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory artifacts/test-results
+
+      # Restore enforces NU1901-NU1904 as errors; this step provides a readable report.
+      - name: Report dependency vulnerabilities
+        run: dotnet list YahooMonthPrint.sln package --vulnerable --include-transitive
+
+      - name: Publish self-contained application
+        run: dotnet publish src/YahooMonthPrint.App/YahooMonthPrint.App.csproj --configuration Release --runtime win-x64 --self-contained true --no-restore --output artifacts/publish/win-x64 -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+
+      - name: Prove self-contained application startup
+        shell: pwsh
+        run: ./eng/verify-self-contained.ps1
+
+      - name: Install Inno Setup
+        run: choco install innosetup --version=6.7.1 --yes --no-progress
+
+      - name: Compile installer toolchain smoke test
+        shell: pwsh
+        run: ./eng/package-smoke.ps1
+
+      - name: Upload validation artifacts
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: phase-1-validation
+          path: |
+            artifacts/installer-smoke/
+            artifacts/self-contained-validation/
+            artifacts/test-results/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload self-contained application from main
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: self-contained-win-x64
+          path: artifacts/publish/win-x64/
+          if-no-files-found: error
+          retention-days: 7
