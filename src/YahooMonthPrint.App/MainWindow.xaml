@@ -20,6 +20,16 @@
             <Setter Property="FontSize" Value="15" />
             <Setter Property="FontWeight" Value="SemiBold" />
         </Style>
+        <Style x:Key="CollapseWhenEmpty" TargetType="TextBlock">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Text, RelativeSource={RelativeSource Self}}" Value="">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Text, RelativeSource={RelativeSource Self}}" Value="{x:Null}">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
 
     <Grid Background="#FFF7F8FA">
@@ -79,7 +89,7 @@
                               IsChecked="{Binding ShowLocations}" />
                     <Button AutomationProperties.Name="Reload sample schedule"
                             Command="{Binding RefreshCommand}"
-                            Content="↻ _Refresh"
+                            Content="↻ Re_fresh"
                             Style="{StaticResource ToolbarButton}"
                             ToolTip="Reload the offline sample schedule" />
                 </StackPanel>
@@ -125,7 +135,7 @@
                             <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center" Style="{StaticResource SidebarHeading}" Margin="0" Text="Items this month" />
                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                                 <Button MinHeight="28" Margin="3,0" Command="{Binding ShowAllTitlesCommand}" Content="Show _All" />
-                                <Button MinHeight="28" Command="{Binding HideAllTitlesCommand}" Content="_Hide All" />
+                                <Button MinHeight="28" Command="{Binding HideAllTitlesCommand}" Content="H_ide All" />
                             </StackPanel>
                         </DockPanel>
                         <ItemsControl ItemsSource="{Binding TitleFilters}">
@@ -153,9 +163,9 @@
                                                 <Button Grid.Column="1"
                                                         MinWidth="50"
                                                         MinHeight="28"
-                                                        AutomationProperties.Name="Show hidden occurrence"
+                                                        AutomationProperties.Name="{Binding Label, StringFormat='Show {0}'}"
                                                         Command="{Binding RestoreCommand}"
-                                                        Content="_Show" />
+                                                        Content="Show" />
                                             </Grid>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
@@ -275,10 +285,21 @@
                                                             </Grid.ColumnDefinitions>
                                                             <Border Grid.Column="0" Margin="0,0,5,0" Background="{Binding CalendarColor}" CornerRadius="2" />
                                                             <StackPanel Grid.Column="1">
-                                                                <TextBlock FontSize="10" Foreground="#FF484D55" Text="{Binding TimeText}" />
+                                                                <TextBlock FontSize="10"
+                                                                           Foreground="#FF484D55"
+                                                                           Style="{StaticResource CollapseWhenEmpty}"
+                                                                           Text="{Binding TimeText}" />
                                                                 <TextBlock FontWeight="SemiBold" Text="{Binding Title}" TextWrapping="Wrap" />
-                                                                <TextBlock Foreground="#FF30343A" Text="{Binding DescriptionText}" TextWrapping="Wrap" />
-                                                                <TextBlock FontSize="10" FontStyle="Italic" Foreground="#FF555B65" Text="{Binding Location}" TextWrapping="Wrap" />
+                                                                <TextBlock Foreground="#FF30343A"
+                                                                           Style="{StaticResource CollapseWhenEmpty}"
+                                                                           Text="{Binding DescriptionText}"
+                                                                           TextWrapping="Wrap" />
+                                                                <TextBlock FontSize="10"
+                                                                           FontStyle="Italic"
+                                                                           Foreground="#FF555B65"
+                                                                           Style="{StaticResource CollapseWhenEmpty}"
+                                                                           Text="{Binding Location}"
+                                                                           TextWrapping="Wrap" />
                                                             </StackPanel>
                                                             <Button Grid.Column="2"
                                                                     Width="24"
@@ -292,7 +313,7 @@
                                                                     <Style TargetType="Button">
                                                                         <Setter Property="Opacity" Value="0" />
                                                                         <Style.Triggers>
-                                                                            <DataTrigger Binding="{Binding IsMouseOver, ElementName=EventCard}" Value="True">
+                                                                            <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Border}}" Value="True">
                                                                                 <Setter Property="Opacity" Value="1" />
                                                                             </DataTrigger>
                                                                             <DataTrigger Binding="{Binding IsKeyboardFocusWithin, RelativeSource={RelativeSource Self}}" Value="True">

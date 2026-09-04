@@ -26,7 +26,7 @@ dotnet test YahooMonthPrint.sln --configuration Release --no-build
 dotnet run --project src/YahooMonthPrint.App/YahooMonthPrint.App.csproj --configuration Release --no-build -- --smoke-test
 ```
 
-The test suite covers compact and six-row grids, leap/year boundaries, out-of-month range dates, all-day/timed ordering, hostile and multiline descriptions, detail projections, both quick-filter modes, calendar/title filters, filter ordering, occurrence identity, one-occurrence hiding, individual/all restoration, deterministic counts/title lists, debounce supersession, navigation cancellation, and year-boundary navigation.
+The test suite covers compact and six-row grids, leap/year boundaries, out-of-month range dates, multi-day and grid-boundary overlap, all-day/timed ordering, hostile and multiline descriptions, detail projections, both quick-filter modes, calendar/title filters, filter ordering, occurrence identity, one-occurrence hiding, cross-month hidden-item restoration, single-pass bulk filtering, friendly unexpected-source failures, deterministic counts/title lists, debounce supersession, navigation cancellation, and year-boundary navigation.
 
 The `--smoke-test` path constructs the real WPF window and parses the full Phase 2 XAML without leaving a visible window open.
 

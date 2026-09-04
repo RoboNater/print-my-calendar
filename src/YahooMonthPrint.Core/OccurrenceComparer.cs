@@ -25,8 +25,8 @@ public sealed class OccurrenceComparer : IComparer<CalendarOccurrence>
             return 1;
         }
 
-        var dayComparison = DateOnly.FromDateTime(x.Start.LocalDateTime).CompareTo(
-            DateOnly.FromDateTime(y.Start.LocalDateTime));
+        var dayComparison = DateOnly.FromDateTime(x.Start.DateTime).CompareTo(
+            DateOnly.FromDateTime(y.Start.DateTime));
         if (dayComparison != 0)
         {
             return dayComparison;

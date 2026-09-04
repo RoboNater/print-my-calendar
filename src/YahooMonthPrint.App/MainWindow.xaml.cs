@@ -17,7 +17,7 @@ public partial class MainWindow : Window
         Closed += OnClosed;
     }
 
-    private async void OnLoaded(object sender, RoutedEventArgs e)
+    private void OnLoaded(object sender, RoutedEventArgs e)
     {
         if (initialized)
         {
@@ -25,7 +25,7 @@ public partial class MainWindow : Window
         }
 
         initialized = true;
-        await viewModel.InitializeAsync();
+        viewModel.RefreshCommand.Execute(null);
     }
 
     private void OnClosed(object? sender, EventArgs e) => viewModel.Dispose();

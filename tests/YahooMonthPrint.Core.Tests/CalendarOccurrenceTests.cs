@@ -62,6 +62,39 @@ public sealed class CalendarOccurrenceTests
         Assert.True(ordered[0].IsAllDay);
     }
 
+    [Fact]
+    public void DateRangeIncludesEveryOverlappingDayWithExclusiveEnd()
+    {
+        var occurrence = new CalendarOccurrence(
+            "college",
+            "conference",
+            new DateTimeOffset(2026, 9, 20, 0, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 9, 23, 0, 0, 0, TimeSpan.Zero),
+            true,
+            "Conference");
+
+        Assert.True(OccurrenceDateRange.OccursOnDate(occurrence, new DateOnly(2026, 9, 20)));
+        Assert.True(OccurrenceDateRange.OccursOnDate(occurrence, new DateOnly(2026, 9, 21)));
+        Assert.True(OccurrenceDateRange.OccursOnDate(occurrence, new DateOnly(2026, 9, 22)));
+        Assert.False(OccurrenceDateRange.OccursOnDate(occurrence, new DateOnly(2026, 9, 23)));
+    }
+
+    [Fact]
+    public void DateRangeIncludesZeroDurationOccurrenceOnItsStartDate()
+    {
+        var start = new DateTimeOffset(2026, 9, 20, 9, 0, 0, TimeSpan.Zero);
+        var occurrence = new CalendarOccurrence(
+            "college",
+            "reminder",
+            start,
+            start,
+            false,
+            "Reminder");
+
+        Assert.True(OccurrenceDateRange.OccursOnDate(occurrence, new DateOnly(2026, 9, 20)));
+        Assert.False(OccurrenceDateRange.OccursOnDate(occurrence, new DateOnly(2026, 9, 21)));
+    }
+
     private static CalendarOccurrence Occurrence(string uid, DateTimeOffset start) => new(
         "college",
         uid,

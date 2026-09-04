@@ -11,6 +11,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private readonly ICalendarOccurrenceSource source;
     private readonly TimeSpan filterDebounce;
     private readonly Dictionary<string, CalendarSource> calendarLookup;
+    private readonly Dictionary<OccurrenceKey, CalendarOccurrence> hiddenOccurrenceLookup = [];
     private CancellationTokenSource? loadCancellation;
     private CancellationTokenSource? filterCancellation;
     private MonthOccurrenceSet occurrenceSet = new([]);
@@ -21,6 +22,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private string statusText = "Offline sample schedule";
     private int loadVersion;
     private Task pendingFilterUpdate = Task.CompletedTask;
+    private bool isBatchUpdatingTitleFilters;
     private bool disposed;
 
     public MainWindowViewModel(
@@ -48,10 +50,15 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         ];
         DescriptionLineOptions = [1, 2, 3, 4];
 
-        PreviousMonthCommand = new RelayCommand(() => _ = NavigateAsync(-1));
-        NextMonthCommand = new RelayCommand(() => _ = NavigateAsync(1));
-        TodayCommand = new RelayCommand(() => _ = NavigateToAsync(DateOnly.FromDateTime(DateTime.Today)));
-        RefreshCommand = new RelayCommand(() => _ = RefreshAsync(), () => !IsLoading);
+        PreviousMonthCommand = new AsyncRelayCommand(() => NavigateAsync(-1), ReportUnexpectedError);
+        NextMonthCommand = new AsyncRelayCommand(() => NavigateAsync(1), ReportUnexpectedError);
+        TodayCommand = new AsyncRelayCommand(
+            () => NavigateToAsync(DateOnly.FromDateTime(DateTime.Today)),
+            ReportUnexpectedError);
+        RefreshCommand = new AsyncRelayCommand(
+            RefreshAsync,
+            ReportUnexpectedError,
+            () => !IsLoading);
         ShowAllTitlesCommand = new RelayCommand(() => SetAllTitles(true));
         HideAllTitlesCommand = new RelayCommand(() => SetAllTitles(false));
         RestoreAllCommand = new RelayCommand(RestoreAll, () => state.HiddenOccurrences.Count > 0);
@@ -182,7 +189,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         {
             if (SetProperty(ref isLoading, value))
             {
-                ((RelayCommand)RefreshCommand).NotifyCanExecuteChanged();
+                ((AsyncRelayCommand)RefreshCommand).NotifyCanExecuteChanged();
             }
         }
     }
@@ -241,6 +248,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         catch (CalendarLoadException exception)
         {
             StatusText = $"Sample schedule unavailable: {exception.Message}";
+        }
+        catch (Exception exception) when (IsRecoverable(exception))
+        {
+            ReportUnexpectedError(exception);
         }
         finally
         {
@@ -318,6 +329,11 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     private void SetTitleEnabled(string title, bool enabled)
     {
+        if (isBatchUpdatingTitleFilters)
+        {
+            return;
+        }
+
         var disabledTitles = state.DisabledTitles.ToHashSet(StringComparer.Ordinal);
         if (enabled)
         {
@@ -334,10 +350,31 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     private void SetAllTitles(bool enabled)
     {
-        foreach (var item in TitleFilters)
+        var disabledTitles = state.DisabledTitles.ToHashSet(StringComparer.Ordinal);
+        if (enabled)
         {
-            item.IsEnabled = enabled;
+            disabledTitles.ExceptWith(TitleFilters.Select(item => item.Id));
         }
+        else
+        {
+            disabledTitles.UnionWith(TitleFilters.Select(item => item.Id));
+        }
+
+        state = state with { DisabledTitles = disabledTitles };
+        isBatchUpdatingTitleFilters = true;
+        try
+        {
+            foreach (var item in TitleFilters)
+            {
+                item.IsEnabled = enabled;
+            }
+        }
+        finally
+        {
+            isBatchUpdatingTitleFilters = false;
+        }
+
+        ApplyVisibility();
     }
 
     private async Task DebounceFilterAsync()
@@ -360,18 +397,21 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     private void HideOccurrence(CalendarOccurrence occurrence)
     {
+        hiddenOccurrenceLookup[occurrence.Key] = occurrence;
         state = state.Hide(occurrence.Key);
         ApplyVisibility();
     }
 
     private void RestoreOccurrence(CalendarOccurrence occurrence)
     {
+        hiddenOccurrenceLookup.Remove(occurrence.Key);
         state = state.Restore(occurrence.Key);
         ApplyVisibility();
     }
 
     private void RestoreAll()
     {
+        hiddenOccurrenceLookup.Clear();
         state = state.RestoreAll();
         ApplyVisibility();
     }
@@ -398,7 +438,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         foreach (var date in range.Dates)
         {
             var dayOccurrences = visible
-                .Where(occurrence => DateOnly.FromDateTime(occurrence.Start.LocalDateTime) == date)
+                .Where(occurrence => OccurrenceDateRange.OccursOnDate(occurrence, date))
                 .Select(CreateOccurrenceViewModel)
                 .ToArray();
             Days.Add(new CalendarDayViewModel(
@@ -427,9 +467,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private void RebuildHiddenOccurrences()
     {
         HiddenOccurrences.Clear();
-        foreach (var occurrence in occurrenceSet.RawOccurrences
-                     .Where(item => state.HiddenOccurrences.Contains(item.Key))
-                     .Order(OccurrenceComparer.Instance))
+        foreach (var occurrence in hiddenOccurrenceLookup.Values.Order(OccurrenceComparer.Instance))
         {
             var label = occurrence.IsAllDay
                 ? $"{occurrence.Title} — {occurrence.Start:MMM d}"
@@ -445,6 +483,15 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     private static DateOnly FirstOfMonth(DateOnly date) => new(date.Year, date.Month, 1);
+
+    private void ReportUnexpectedError(Exception exception)
+    {
+        _ = exception;
+        StatusText = "The sample schedule could not be loaded because of an unexpected error. Try again.";
+    }
+
+    private static bool IsRecoverable(Exception exception) =>
+        exception is not OutOfMemoryException and not AccessViolationException;
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(disposed, this);
 }

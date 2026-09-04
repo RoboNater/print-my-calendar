@@ -1,3 +1,4 @@
+using System.Collections.Specialized;
 using YahooMonthPrint.App.Services;
 using YahooMonthPrint.App.ViewModels;
 using YahooMonthPrint.Core;
@@ -117,6 +118,87 @@ public sealed class MainWindowViewModelTests
         Assert.Equal("October result", AllVisible(viewModel).Single().Title);
     }
 
+    [Fact]
+    public async Task UnexpectedSourceFailureProducesFriendlyStatusAndClearsLoading()
+    {
+        using var viewModel = new MainWindowViewModel(
+            new ThrowingSource(),
+            September,
+            TimeSpan.FromMilliseconds(1));
+
+        await viewModel.InitializeAsync();
+
+        Assert.False(viewModel.IsLoading);
+        Assert.Contains("unexpected error", viewModel.StatusText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task MultiDayOccurrencesRenderOnEveryOverlappingGridDate()
+    {
+        var beforeGrid = new CalendarOccurrence(
+            "college",
+            "conference",
+            new DateTimeOffset(2026, 8, 28, 0, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 9, 2, 0, 0, 0, TimeSpan.Zero),
+            true,
+            "Conference");
+        var inMonth = new CalendarOccurrence(
+            "college",
+            "retreat",
+            new DateTimeOffset(2026, 9, 20, 0, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 9, 23, 0, 0, 0, TimeSpan.Zero),
+            true,
+            "Retreat");
+        using var viewModel = new MainWindowViewModel(
+            new FixedSource([beforeGrid, inMonth]),
+            September);
+
+        await viewModel.InitializeAsync();
+
+        Assert.Equal(2, viewModel.VisibleOccurrenceCount);
+        Assert.Equal(3, CountDaysContaining(viewModel, "Conference"));
+        Assert.Equal(3, CountDaysContaining(viewModel, "Retreat"));
+    }
+
+    [Fact]
+    public async Task HiddenItemsRemainDiscoverableAcrossMonthNavigation()
+    {
+        using var viewModel = CreateViewModel();
+        await viewModel.InitializeAsync();
+        AllVisible(viewModel).Single(item => item.Title == "Doctor appointment").HideCommand.Execute(null);
+
+        await viewModel.NavigateAsync(2);
+
+        Assert.Single(viewModel.HiddenOccurrences);
+        Assert.Equal("Hidden items (1)", viewModel.HiddenCountLabel);
+        Assert.True(viewModel.RestoreAllCommand.CanExecute(null));
+
+        viewModel.RestoreAllCommand.Execute(null);
+
+        Assert.Empty(viewModel.HiddenOccurrences);
+        Assert.False(viewModel.RestoreAllCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task HideAllTitlesRebuildsTheCalendarOnlyOnce()
+    {
+        using var viewModel = CreateViewModel();
+        await viewModel.InitializeAsync();
+        var resetCount = 0;
+        viewModel.Days.CollectionChanged += (_, eventArgs) =>
+        {
+            if (eventArgs.Action == NotifyCollectionChangedAction.Reset)
+            {
+                resetCount++;
+            }
+        };
+
+        viewModel.HideAllTitlesCommand.Execute(null);
+
+        Assert.Equal(1, resetCount);
+        Assert.Equal(0, viewModel.VisibleOccurrenceCount);
+    }
+
     private static MainWindowViewModel CreateViewModel() => new(
         new FakeCalendarOccurrenceSource(),
         September,
@@ -124,6 +206,36 @@ public sealed class MainWindowViewModelTests
 
     private static List<OccurrenceViewModel> AllVisible(MainWindowViewModel viewModel) =>
         viewModel.Days.SelectMany(day => day.Occurrences).ToList();
+
+    private static int CountDaysContaining(MainWindowViewModel viewModel, string title) =>
+        viewModel.Days.Count(day => day.Occurrences.Any(item => item.Title == title));
+
+    private sealed class FixedSource(IReadOnlyList<CalendarOccurrence> occurrences)
+        : ICalendarOccurrenceSource
+    {
+        public IReadOnlyList<CalendarSource> Calendars { get; } = [new("college", "College")];
+
+        public Task<IReadOnlyList<CalendarOccurrence>> LoadAsync(
+            MonthGridRange range,
+            CancellationToken cancellationToken)
+        {
+            _ = range;
+            return Task.FromResult(occurrences);
+        }
+    }
+
+    private sealed class ThrowingSource : ICalendarOccurrenceSource
+    {
+        public IReadOnlyList<CalendarSource> Calendars { get; } = [new("college", "College")];
+
+        public Task<IReadOnlyList<CalendarOccurrence>> LoadAsync(
+            MonthGridRange range,
+            CancellationToken cancellationToken)
+        {
+            _ = range;
+            throw new InvalidOperationException("Synthetic unexpected failure");
+        }
+    }
 
     private sealed class ControllableSource : ICalendarOccurrenceSource
     {
