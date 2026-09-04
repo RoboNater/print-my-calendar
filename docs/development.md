@@ -82,3 +82,14 @@ Package upgrades should be isolated, reviewed for license/API changes, and follo
 ## Secrets and integration-test data
 
 Automated tests use sanitized fixtures. Future real-Yahoo integration tests will read `YMP_TEST_YAHOO_USER` and `YMP_TEST_YAHOO_APP_PASSWORD` only when explicitly enabled. Do not put those values in tracked files, command transcripts, CI artifacts, screenshots, settings, cache fixtures, or logs.
+
+Phase 3 provides an optional discovery/query-only integration test. It remains skipped unless all three environment variables are supplied:
+
+```powershell
+$env:YMP_RUN_YAHOO_INTEGRATION = '1'
+$env:YMP_TEST_YAHOO_USER = 'test-account@example.com'
+$env:YMP_TEST_YAHOO_APP_PASSWORD = '<Yahoo app password>'
+dotnet test tests/YahooMonthPrint.YahooCalDav.Tests/YahooMonthPrint.YahooCalDav.Tests.csproj
+```
+
+Use only a non-production test account. Never capture those environment values in logs or committed artifacts.

@@ -32,6 +32,10 @@ jobs:
         shell: pwsh
         run: ./eng/verify-tools.ps1 -BuildToolsOnly
 
+      - name: Test Inno Setup discovery rules
+        shell: pwsh
+        run: ./eng/test-InnoSetupDiscovery.ps1
+
       - name: Restore locked dependencies
         run: dotnet restore YahooMonthPrint.sln --locked-mode
 
