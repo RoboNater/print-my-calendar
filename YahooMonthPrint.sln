@@ -20,6 +20,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "YahooMonthPrint.YahooCalDav
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "YahooMonthPrint.Printing.Tests", "tests\YahooMonthPrint.Printing.Tests\YahooMonthPrint.Printing.Tests.csproj", "{CE1F03C6-D1E6-4B98-89B7-884C695C2168}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "YahooMonthPrint.App.Tests", "tests\YahooMonthPrint.App.Tests\YahooMonthPrint.App.Tests.csproj", "{3D7F0192-A8CB-4A90-A437-D27D493CC04A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -57,6 +59,10 @@ Global
 		{CE1F03C6-D1E6-4B98-89B7-884C695C2168}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{CE1F03C6-D1E6-4B98-89B7-884C695C2168}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{CE1F03C6-D1E6-4B98-89B7-884C695C2168}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3D7F0192-A8CB-4A90-A437-D27D493CC04A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3D7F0192-A8CB-4A90-A437-D27D493CC04A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3D7F0192-A8CB-4A90-A437-D27D493CC04A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3D7F0192-A8CB-4A90-A437-D27D493CC04A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{76420544-7BDA-456A-B3FE-3BF037DF624B} = {FA1855EB-5585-47C5-BC89-9008B0C61022}
@@ -66,5 +72,6 @@ Global
 		{45FB949B-253A-42D2-BE49-8AD4D59C2E3D} = {4CB2D2EA-5D36-4595-A525-BA775646AE9F}
 		{E02A6F4D-1893-4895-AAA7-191B1BDC3984} = {4CB2D2EA-5D36-4595-A525-BA775646AE9F}
 		{CE1F03C6-D1E6-4B98-89B7-884C695C2168} = {4CB2D2EA-5D36-4595-A525-BA775646AE9F}
+		{3D7F0192-A8CB-4A90-A437-D27D493CC04A} = {4CB2D2EA-5D36-4595-A525-BA775646AE9F}
 	EndGlobalSection
 EndGlobal

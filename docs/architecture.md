@@ -40,6 +40,16 @@ Yahoo CalDAV query -> normalized Core occurrences -> visibility pipeline
 
 Fetched occurrences remain available in memory while filters change. Screen and print receive one authoritative visible-occurrence result. Preview and printer output use the same generated document rather than rendering the live UI tree.
 
+Phase 2 realizes the first half of this flow with an `ICalendarOccurrenceSource` implemented by a deterministic offline sample. `MainWindowViewModel` retains the raw occurrence set, owns local view state, and delegates all filtering and detail projection to Core. The UI only renders that projected result; it does not duplicate visibility rules. Phase 3 will supply the production Yahoo implementation behind the same source boundary.
+
+Core treats the wall-clock components of timed `CalendarOccurrence.Start` and `End` values as already normalized to the Windows user's local timezone. The Yahoo layer must convert timed instants to that timezone before constructing Core occurrences while retaining the original zone identifier in `SourceTimeZoneId`; all-day dates are never shifted across timezone boundaries. Day bucketing, ordering, and displayed time therefore use the same normalized clock.
+
+The Core constructor rejects timed values whose offsets do not match the Windows local zone at those instants, so adapter mistakes fail at the normalization boundary instead of silently placing an event in the wrong day cell. Yahoo recurrence expansion must populate a normalized `RecurrenceId` for every recurring instance. Within an authoritative range reload, the view model can safely re-key one uniquely matched non-recurring calendar/UID whose time moved; ambiguous recurring instances are never guessed. A hidden occurrence missing from a reload of a range it previously overlapped is pruned as deleted. A reschedule beyond that range has a new spec-defined identity and can leave the prior hidden entry visible until its former range is reloaded.
+
+The view model currently treats every successful source result as complete for its requested range. Phase 3's Yahoo adapter must return the complete occurrence set or fail the whole load with `CalendarLoadException`; partial success is not representable until the result contract and UI explicitly communicate incompleteness.
+
+`VisibleOccurrenceCount` counts logical occurrences after filtering. A multi-day occurrence may produce a card in several day cells but contributes one to this count, matching the user's number of events rather than the number of visual repetitions.
+
 ## Async and failure boundaries
 
 - Network, parsing, cache I/O, and substantial print generation must not block the WPF UI thread.
