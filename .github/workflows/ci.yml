@@ -1,5 +1,8 @@
 name: CI
 
+env:
+  RELEASE_VERSION: 1.0.${{ github.run_number }}
+
 on:
   push:
     branches: [main]
@@ -53,7 +56,7 @@ jobs:
         run: dotnet list YahooMonthPrint.sln package --vulnerable --include-transitive
 
       - name: Publish self-contained application
-        run: dotnet publish src/YahooMonthPrint.App/YahooMonthPrint.App.csproj --configuration Release --runtime win-x64 --self-contained true --no-restore --output artifacts/publish/win-x64 -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+        run: dotnet publish src/YahooMonthPrint.App/YahooMonthPrint.App.csproj --configuration Release --runtime win-x64 --self-contained true --no-restore --output artifacts/publish/win-x64 -p:Version=${{ env.RELEASE_VERSION }} -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
 
       - name: Prove self-contained application startup
         shell: pwsh
@@ -62,16 +65,20 @@ jobs:
       - name: Install Inno Setup
         run: choco install innosetup --version=6.7.1 --yes --no-progress
 
-      - name: Compile installer toolchain smoke test
+      - name: Build production installer and checksum
         shell: pwsh
-        run: ./eng/package-smoke.ps1
+        run: ./eng/package-release.ps1 -Version $env:RELEASE_VERSION
+
+      - name: Render Letter and A4 print samples
+        run: ./artifacts/publish/win-x64/YahooMonthPrint.App.exe --render-print-samples artifacts/print-samples
 
       - name: Upload validation artifacts
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: phase-1-validation
+          name: phase-4-validation
           path: |
-            artifacts/installer-smoke/
+            artifacts/installer/
+            artifacts/print-samples/
             artifacts/self-contained-validation/
             artifacts/test-results/
           if-no-files-found: error

@@ -1,13 +1,16 @@
+using System.IO;
 using System.Windows;
 using YahooMonthPrint.App.Services;
 using YahooMonthPrint.App.ViewModels;
+using YahooMonthPrint.Core;
+using YahooMonthPrint.Printing;
 
 namespace YahooMonthPrint.App;
 
 public partial class App : Application, IDisposable
 {
     private SerializedSettingsStore settingsStore = null!;
-    private ICalendarCacheStore cacheStore = null!;
+    private CalendarCacheStore cacheStore = null!;
     private WindowsCredentialStore credentialStore = null!;
     private IYahooCalDavClientFactory clientFactory = null!;
     private RotatingFileAppLogger logger = null!;
@@ -23,6 +26,63 @@ public partial class App : Application, IDisposable
         {
             MainWindow = CreateDemoWindow();
             _ = MainWindow.Dispatcher.InvokeAsync(() => Shutdown(0));
+            return;
+        }
+
+        var sampleArgument = Array.IndexOf(e.Args, "--render-print-samples");
+        if (sampleArgument >= 0)
+        {
+            var outputDirectory = sampleArgument + 1 < e.Args.Length
+                ? Path.GetFullPath(e.Args[sampleArgument + 1])
+                : Path.GetFullPath("artifacts/print-samples");
+            var source = new FakeCalendarOccurrenceSource();
+            var displayedMonth = new DateOnly(2026, 9, 1);
+            var result = await source.LoadAsync(
+                MonthGrid.Create(displayedMonth.Year, displayedMonth.Month),
+                CancellationToken.None);
+            foreach (var paper in new[] { PrintPaperSize.Letter, PrintPaperSize.A4 })
+            {
+                var options = new MonthPrintOptions
+                {
+                    Page = PrintPageGeometry.Create(paper),
+                    DetailLevel = DetailLevel.Detailed,
+                    DescriptionLineLimit = 3,
+                };
+                var model = MonthLayoutModelBuilder.Build(displayedMonth, result.Occurrences, options);
+                var plan = new MonthPrintLayoutEngine().CreatePlan(model);
+                var document = new FixedDocumentRenderer().Render(plan);
+                FixedDocumentPngExporter.Export(
+                    document,
+                    outputDirectory,
+                    $"september-2026-{paper.ToString().ToLowerInvariant()}");
+            }
+
+            Shutdown(0);
+            return;
+        }
+
+        if (e.Args.Contains("--uninstall-cleanup", StringComparer.Ordinal))
+        {
+            ConfigureServices();
+            try
+            {
+                var settings = await settingsStore.LoadAsync();
+                if (!string.IsNullOrWhiteSpace(settings.YahooAccount))
+                {
+                    credentialStore.Delete(settings.YahooAccount);
+                }
+
+                await cacheStore.ClearAsync();
+                await settingsStore.ClearAsync();
+                RemoveLocalApplicationData();
+                Shutdown(0);
+            }
+            catch (Exception exception) when (exception is not OutOfMemoryException)
+            {
+                logger.Log("uninstall", "cleanup-failed", exception: exception);
+                Shutdown(1);
+            }
+
             return;
         }
 
@@ -108,7 +168,7 @@ public partial class App : Application, IDisposable
             MaximumDescriptionLines = settings.MaximumDescriptionLines,
             ShowLocations = settings.ShowLocations,
         };
-        var window = new MainWindow(viewModel);
+        var window = new MainWindow(viewModel, settings);
         window.SettingsRequested += OnSettingsRequested;
         MainWindow = window;
         window.Show();
@@ -171,5 +231,28 @@ public partial class App : Application, IDisposable
         var source = new FakeCalendarOccurrenceSource();
         var viewModel = new MainWindowViewModel(source);
         return new MainWindow(viewModel);
+    }
+
+    private static void RemoveLocalApplicationData()
+    {
+        var localApplicationData = Path.GetFullPath(Environment.GetFolderPath(
+            Environment.SpecialFolder.LocalApplicationData));
+        var applicationData = Path.GetFullPath(AppStoragePaths.Root);
+        if (!string.Equals(
+                Path.GetDirectoryName(applicationData),
+                localApplicationData,
+                StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(
+                Path.GetFileName(applicationData),
+                "YahooMonthPrint",
+                StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("The local application data path is unexpected.");
+        }
+
+        if (Directory.Exists(applicationData))
+        {
+            Directory.Delete(applicationData, recursive: true);
+        }
     }
 }

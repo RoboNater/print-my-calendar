@@ -26,24 +26,32 @@ function Test-InnoCompilerCompatibility {
         [Parameter(Mandatory)][string]$InstallerScript
     )
 
-    $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
-    $startInfo.FileName = $CompilerPath
-    $startInfo.Arguments = "/Qp /O- `"$InstallerScript`""
-    $startInfo.CreateNoWindow = $true
-    $startInfo.UseShellExecute = $false
-    $startInfo.RedirectStandardOutput = $true
-    $startInfo.RedirectStandardError = $true
+    $probeOutput = Join-Path ([System.IO.Path]::GetTempPath()) "YahooMonthPrint-InnoProbe-$([Guid]::NewGuid().ToString('N'))"
+    try {
+        [System.IO.Directory]::CreateDirectory($probeOutput) | Out-Null
+        $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+        $startInfo.FileName = $CompilerPath
+        $startInfo.Arguments = "/Qp /O`"$probeOutput`" `"$InstallerScript`""
+        $startInfo.CreateNoWindow = $true
+        $startInfo.UseShellExecute = $false
+        $startInfo.RedirectStandardOutput = $true
+        $startInfo.RedirectStandardError = $true
 
-    $compilerProcess = [System.Diagnostics.Process]::Start($startInfo)
-    $standardOutput = $compilerProcess.StandardOutput.ReadToEnd()
-    $standardError = $compilerProcess.StandardError.ReadToEnd()
-    $compilerProcess.WaitForExit()
-    $exitCode = $compilerProcess.ExitCode
-    $compilerProcess.Dispose()
+        $compilerProcess = [System.Diagnostics.Process]::Start($startInfo)
+        $standardOutput = $compilerProcess.StandardOutput.ReadToEnd()
+        $standardError = $compilerProcess.StandardError.ReadToEnd()
+        $compilerProcess.WaitForExit()
+        $exitCode = $compilerProcess.ExitCode
+        $compilerProcess.Dispose()
 
-    return [PSCustomObject]@{
-        IsCompatible = $exitCode -eq 0
-        Output = "$standardOutput`n$standardError".Trim()
+        return [PSCustomObject]@{
+            IsCompatible = $exitCode -eq 0
+            Output = "$standardOutput`n$standardError".Trim()
+        }
+    } finally {
+        if ([System.IO.Directory]::Exists($probeOutput)) {
+            [System.IO.Directory]::Delete($probeOutput, $true)
+        }
     }
 }
 

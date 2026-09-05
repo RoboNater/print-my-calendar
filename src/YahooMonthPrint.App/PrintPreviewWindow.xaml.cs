@@ -186,11 +186,11 @@ public partial class PrintPreviewWindow : Window
                 return;
             }
 
-            if (AdjustForPrinterImageableArea(dialog))
+            if (AdjustForPrinterTicket(dialog) || AdjustForPrinterImageableArea(dialog))
             {
                 MessageBox.Show(
                     this,
-                    "This printer needs wider margins. The preview was updated; review it, then choose Print again.",
+                    "The printer changed the requested paper, orientation, or margins. The preview was updated; review it, then choose Print again.",
                     "Print Preview Updated",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
@@ -211,6 +211,30 @@ public partial class PrintPreviewWindow : Window
             _ = exception;
             ShowPrintError();
         }
+    }
+
+    private bool AdjustForPrinterTicket(PrintDialog dialog)
+    {
+        var paper = dialog.PrintTicket.PageMediaSize?.PageMediaSizeName switch
+        {
+            PageMediaSizeName.ISOA4 => PrintPaperSize.A4,
+            PageMediaSizeName.NorthAmericaLetter => PrintPaperSize.Letter,
+            _ => options.Page.PaperSize,
+        };
+        var orientation = dialog.PrintTicket.PageOrientation switch
+        {
+            PageOrientation.Portrait => PrintPageOrientation.Portrait,
+            PageOrientation.Landscape => PrintPageOrientation.Landscape,
+            _ => options.Page.Orientation,
+        };
+        if (paper == options.Page.PaperSize && orientation == options.Page.Orientation)
+        {
+            return false;
+        }
+
+        options = options with { Page = PrintPageGeometry.Create(paper, orientation) };
+        RenderCurrentOptions();
+        return true;
     }
 
     private bool AdjustForPrinterImageableArea(PrintDialog dialog)

@@ -126,6 +126,30 @@ public sealed class MonthPrintingTests
     }
 
     [Fact]
+    public void AutomaticFallbackKeepsRequestedDetailOnDaysThatFit()
+    {
+        var occurrences = Enumerable.Range(0, 20)
+            .Select(index => Occurrence($"Dense {index}", 14, 8 + index % 12, "Important detail", "Room"))
+            .Append(Occurrence("Ordinary", 15, 9, "Keep this description", "Science 201"))
+            .ToArray();
+        var requested = new MonthPrintOptions
+        {
+            DescriptionLineLimit = 3,
+            ShowLocations = true,
+        };
+        var model = MonthLayoutModelBuilder.Build(new DateOnly(2026, 9, 1), occurrences, requested);
+
+        var plan = new MonthPrintLayoutEngine(new ConstantTextMeasurer(18)).CreatePlan(model);
+
+        Assert.True(plan.HasOverflow);
+        Assert.Equal(requested, plan.EffectiveOptions);
+        var ordinary = Assert.Single(plan.Days.Single(day =>
+            day.Day.Date == new DateOnly(2026, 9, 15)).MainPageOccurrences);
+        Assert.Equal(["Keep this description"], ordinary.DescriptionLines);
+        Assert.Equal("Science 201", ordinary.Location);
+    }
+
+    [Fact]
     public void LongUnbrokenAndMultilineDetailsRemainAvailableOnDetailsPage()
     {
         var description = $"first line{Environment.NewLine}{new string('x', 8000)}";
