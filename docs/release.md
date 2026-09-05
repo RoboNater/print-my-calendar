@@ -26,6 +26,8 @@ Unsigned development builds are expected. To sign without exposing a PFX passwor
 
 The script signs the published executable before packaging and the installer afterward, using SHA-256 and HTTPS timestamping. It fails if signing was requested but any required input is unavailable. Certificate import and private-key access are release-environment responsibilities; never commit or print certificate material or passwords.
 
+Use `-TimestampUrl <https-url>` to select a different timestamp authority. `-OutputDirectory artifacts\<directory>` writes the installer and checksum to another repository-relative directory under `artifacts`.
+
 ## Visual and clean-machine validation
 
 Generate reviewable Letter and A4 images with:

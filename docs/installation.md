@@ -14,9 +14,18 @@ A configured Windows printer is needed for physical printing. Microsoft Print to
 
 ## Install
 
-1. Download `YahooMonthPrint-Setup.exe` from the project's release assets.
+1. Download `YahooMonthPrint-Setup.exe` and `YahooMonthPrint-Setup.exe.sha256` from the project's [GitHub Releases](https://github.com/RoboNater/print-my-calendar/releases) page.
 2. Optionally verify the download against `YahooMonthPrint-Setup.exe.sha256`.
 3. Run the installer and follow its prompts.
+
+To verify the downloaded files from PowerShell in their containing directory:
+
+```powershell
+$expectedHash = ((Get-Content .\YahooMonthPrint-Setup.exe.sha256) -split '\s+')[0]
+(Get-FileHash .\YahooMonthPrint-Setup.exe -Algorithm SHA256).Hash -eq $expectedHash
+```
+
+Continue only when the command returns `True`.
 
 The per-user installer does not require administrator privileges. It installs under `%LOCALAPPDATA%\Programs\YahooMonthPrint`, creates a Start Menu shortcut, and can optionally create a desktop shortcut.
 

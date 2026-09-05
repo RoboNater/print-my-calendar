@@ -6,10 +6,14 @@ param(
 
     [switch]$SkipTests,
 
+    [string]$OutputDirectory = 'artifacts\installer',
+
     [string]$SignToolPath,
 
     [ValidatePattern('^[0-9A-Fa-f]{40}$')]
-    [string]$SigningCertificateThumbprint
+    [string]$SigningCertificateThumbprint,
+
+    [string]$TimestampUrl = 'https://timestamp.digicert.com'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -18,6 +22,15 @@ $solutionPath = Join-Path $repositoryRoot 'YahooMonthPrint.sln'
 $applicationProject = Join-Path $repositoryRoot 'src\YahooMonthPrint.App\YahooMonthPrint.App.csproj'
 $publishDirectory = 'artifacts\publish\win-x64'
 $resolvedPublishDirectory = Join-Path $repositoryRoot $publishDirectory
+$resolvedOutputDirectory = [System.IO.Path]::GetFullPath((Join-Path $repositoryRoot $OutputDirectory))
+$artifactsRoot = [System.IO.Path]::GetFullPath((Join-Path $repositoryRoot 'artifacts'))
+$artifactsPrefix = $artifactsRoot.TrimEnd([System.IO.Path]::DirectorySeparatorChar) +
+    [System.IO.Path]::DirectorySeparatorChar
+
+if ([System.IO.Path]::IsPathRooted($OutputDirectory) -or
+    -not $resolvedOutputDirectory.StartsWith($artifactsPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw 'OutputDirectory must be a repository-relative directory under artifacts.'
+}
 
 . (Join-Path $PSScriptRoot 'InnoSetup.ps1')
 
@@ -30,9 +43,22 @@ if ([string]::IsNullOrWhiteSpace($innoCompilerPath)) {
     throw 'Inno Setup 6.3 or newer is required. Install it with: winget install --id JRSoftware.InnoSetup --exact --scope user'
 }
 
+$compatibility = Test-InnoCompilerCompatibility `
+    -CompilerPath $innoCompilerPath `
+    -InstallerScript (Join-Path $repositoryRoot 'installer\smoke\YahooMonthPrint.ToolchainSmoke.iss')
+if (-not $compatibility.IsCompatible) {
+    throw "Inno Setup 6.3 or newer is required. $($compatibility.Output)"
+}
+
 Push-Location $repositoryRoot
 try {
     Write-Host "Building Yahoo Month Print installer version $Version"
+
+    foreach ($artifactDirectory in @($resolvedPublishDirectory, $resolvedOutputDirectory)) {
+        if (Test-Path -LiteralPath $artifactDirectory) {
+            Remove-Item -LiteralPath $artifactDirectory -Recurse -Force
+        }
+    }
 
     & dotnet restore $solutionPath --locked-mode
     if ($LASTEXITCODE -ne 0) {
@@ -65,13 +91,13 @@ try {
     }
 
     & (Join-Path $PSScriptRoot 'verify-self-contained.ps1') -PublishDirectory $publishDirectory
-    if ($LASTEXITCODE -ne 0) {
-        throw "Self-contained verification failed with exit code $LASTEXITCODE."
-    }
 
     $packageArguments = @{
         Version = $Version
         PublishDirectory = $publishDirectory
+        OutputDirectory = $OutputDirectory
+        InnoCompilerPath = $innoCompilerPath
+        TimestampUrl = $TimestampUrl
     }
     if (-not [string]::IsNullOrWhiteSpace($SignToolPath)) {
         $packageArguments.SignToolPath = $SignToolPath
@@ -81,9 +107,6 @@ try {
     }
 
     & (Join-Path $PSScriptRoot 'package-release.ps1') @packageArguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "Installer packaging failed with exit code $LASTEXITCODE."
-    }
 }
 finally {
     Pop-Location
