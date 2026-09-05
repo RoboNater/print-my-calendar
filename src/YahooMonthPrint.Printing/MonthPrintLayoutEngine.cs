@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 
 namespace YahooMonthPrint.Printing;
@@ -18,22 +19,19 @@ public sealed class WpfPrintTextMeasurer : IPrintTextMeasurer
             return 0;
         }
 
-        var typeface = new Typeface(
-            new FontFamily("Segoe UI"),
-            FontStyles.Normal,
-            bold ? FontWeights.SemiBold : FontWeights.Normal,
-            FontStretches.Normal);
-        var formatted = new FormattedText(
-            text,
-            CultureInfo.CurrentCulture,
-            FlowDirection.LeftToRight,
-            typeface,
-            fontSizeDips,
-            Brushes.Black,
-            1);
-        formatted.MaxTextWidth = Math.Max(1, width);
-        formatted.LineHeight = fontSizeDips * PrintLayoutMetrics.TextLineHeightMultiplier;
-        return Math.Ceiling(formatted.Height);
+        var textBlock = new TextBlock
+        {
+            Text = text,
+            FontFamily = new FontFamily("Segoe UI"),
+            FontSize = fontSizeDips,
+            FontWeight = bold ? FontWeights.SemiBold : FontWeights.Normal,
+            Foreground = Brushes.Black,
+            TextWrapping = TextWrapping.Wrap,
+            LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
+            LineHeight = fontSizeDips * PrintLayoutMetrics.TextLineHeightMultiplier,
+        };
+        textBlock.Measure(new Size(Math.Max(1, width), double.PositiveInfinity));
+        return Math.Ceiling(textBlock.DesiredSize.Height);
     }
 }
 

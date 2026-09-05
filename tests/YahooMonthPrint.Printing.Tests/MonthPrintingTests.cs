@@ -239,7 +239,10 @@ public sealed class MonthPrintingTests
                     - border.BorderThickness.Bottom
                     - border.Padding.Top
                     - border.Padding.Bottom;
-                return ((StackPanel)border.Child).DesiredSize.Height > contentHeight + 0.01;
+                var requiredHeight = ((StackPanel)border.Child).Children
+                    .Cast<FrameworkElement>()
+                    .Sum(child => child.DesiredSize.Height + child.Margin.Top + child.Margin.Bottom);
+                return requiredHeight > contentHeight + 0.01;
             });
             var detailsPastBottomMargin = rendered.Document.Pages.Skip(1).Count(detailsPage =>
                 detailsPage.Child.Children.Cast<UIElement>().Any(element =>

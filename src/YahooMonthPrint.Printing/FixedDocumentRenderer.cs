@@ -13,9 +13,9 @@ public sealed record RenderedMonthDocument(FixedDocument Document, MonthPrintPla
 
 public sealed class FixedDocumentRenderer(IPrintTextMeasurer? textMeasurer = null)
 {
-    private static readonly Brush GridBrush = new SolidColorBrush(Color.FromRgb(118, 118, 118));
-    private static readonly Brush SecondaryBrush = new SolidColorBrush(Color.FromRgb(82, 82, 82));
-    private static readonly Brush OutOfMonthBrush = new SolidColorBrush(Color.FromRgb(242, 242, 242));
+    private static readonly SolidColorBrush GridBrush = Frozen(Color.FromRgb(118, 118, 118));
+    private static readonly SolidColorBrush SecondaryBrush = Frozen(Color.FromRgb(82, 82, 82));
+    private static readonly SolidColorBrush OutOfMonthBrush = Frozen(Color.FromRgb(242, 242, 242));
     private readonly IPrintTextMeasurer textMeasurer = textMeasurer ?? new WpfPrintTextMeasurer();
 
     public RenderedMonthDocument Render(MonthPrintPlan plan)
@@ -122,16 +122,13 @@ public sealed class FixedDocumentRenderer(IPrintTextMeasurer? textMeasurer = nul
 
         if (dayLayout.OverflowCount > 0)
         {
-            panel.Children.Add(new TextBlock
-            {
-                Margin = new Thickness(0, 1, 0, 0),
-                Text = $"+{dayLayout.OverflowCount} on details page",
-                FontFamily = new FontFamily("Segoe UI"),
-                FontSize = Math.Max(8, fontSize * 0.82),
-                FontWeight = FontWeights.SemiBold,
-                Foreground = Brushes.Black,
-                TextWrapping = TextWrapping.Wrap,
-            });
+            var marker = Text(
+                $"+{dayLayout.OverflowCount} on details page",
+                Math.Max(8, fontSize * 0.82),
+                Brushes.Black,
+                FontWeights.SemiBold);
+            marker.Margin = new Thickness(0, 1, 0, 0);
+            panel.Children.Add(marker);
         }
 
         return new Border
@@ -311,6 +308,13 @@ public sealed class FixedDocumentRenderer(IPrintTextMeasurer? textMeasurer = nul
         Height = geometry.Height,
         Background = Brushes.White,
     };
+
+    private static SolidColorBrush Frozen(Color color)
+    {
+        var brush = new SolidColorBrush(color);
+        brush.Freeze();
+        return brush;
+    }
 
     private static TextBlock Text(
         string value,
