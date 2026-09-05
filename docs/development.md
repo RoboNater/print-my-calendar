@@ -11,6 +11,7 @@ The repository's `global.json` pins the supported .NET 8 SDK feature band. `Dire
 Install these tools for local builds:
 
 - Git;
+- PowerShell 7 or newer; and
 - .NET 8 SDK, including the Windows Desktop targeting pack supplied by the SDK installer.
 
 PR delivery additionally uses an authenticated GitHub CLI (`gh`). Installer work requires Inno Setup 6.3 or newer, including its command-line compiler `ISCC.exe`.
@@ -20,6 +21,7 @@ Example current-user installs from a PowerShell prompt are:
 ```powershell
 winget install --id Git.Git --exact
 winget install --id GitHub.cli --exact
+winget install --id Microsoft.PowerShell --exact
 winget install --id Microsoft.DotNet.SDK.8 --exact
 winget install --id JRSoftware.InnoSetup --exact --scope user
 gh auth login

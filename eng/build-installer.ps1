@@ -1,8 +1,14 @@
+#Requires -Version 7.0
+
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
     [ValidatePattern('^\d+\.\d+\.\d+(\.\d+)?$')]
     [string]$Version,
+
+    [switch]$SkipRestore,
+
+    [switch]$SkipBuild,
 
     [switch]$SkipTests,
 
@@ -23,13 +29,14 @@ $applicationProject = Join-Path $repositoryRoot 'src\YahooMonthPrint.App\YahooMo
 $publishDirectory = 'artifacts\publish\win-x64'
 $resolvedPublishDirectory = Join-Path $repositoryRoot $publishDirectory
 $resolvedOutputDirectory = [System.IO.Path]::GetFullPath((Join-Path $repositoryRoot $OutputDirectory))
-$artifactsRoot = [System.IO.Path]::GetFullPath((Join-Path $repositoryRoot 'artifacts'))
-$artifactsPrefix = $artifactsRoot.TrimEnd([System.IO.Path]::DirectorySeparatorChar) +
+$installerArtifactsRoot = [System.IO.Path]::GetFullPath((Join-Path $repositoryRoot 'artifacts\installer'))
+$installerArtifactsPrefix = $installerArtifactsRoot.TrimEnd([System.IO.Path]::DirectorySeparatorChar) +
     [System.IO.Path]::DirectorySeparatorChar
 
 if ([System.IO.Path]::IsPathRooted($OutputDirectory) -or
-    -not $resolvedOutputDirectory.StartsWith($artifactsPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
-    throw 'OutputDirectory must be a repository-relative directory under artifacts.'
+    ($resolvedOutputDirectory -ne $installerArtifactsRoot -and
+    -not $resolvedOutputDirectory.StartsWith($installerArtifactsPrefix, [System.StringComparison]::OrdinalIgnoreCase))) {
+    throw 'OutputDirectory must be artifacts\installer or a repository-relative directory beneath it.'
 }
 
 . (Join-Path $PSScriptRoot 'InnoSetup.ps1')
@@ -47,7 +54,7 @@ $compatibility = Test-InnoCompilerCompatibility `
     -CompilerPath $innoCompilerPath `
     -InstallerScript (Join-Path $repositoryRoot 'installer\smoke\YahooMonthPrint.ToolchainSmoke.iss')
 if (-not $compatibility.IsCompatible) {
-    throw "Inno Setup 6.3 or newer is required. $($compatibility.Output)"
+    throw "Inno Setup compatibility preflight failed. The installer requires version 6.3 or newer. Compiler output: $($compatibility.Output)"
 }
 
 Push-Location $repositoryRoot
@@ -60,14 +67,18 @@ try {
         }
     }
 
-    & dotnet restore $solutionPath --locked-mode
-    if ($LASTEXITCODE -ne 0) {
-        throw "dotnet restore failed with exit code $LASTEXITCODE."
+    if (-not $SkipRestore) {
+        & dotnet restore $solutionPath --locked-mode
+        if ($LASTEXITCODE -ne 0) {
+            throw "dotnet restore failed with exit code $LASTEXITCODE."
+        }
     }
 
-    & dotnet build $solutionPath --configuration Release --no-restore -p:Version=$Version
-    if ($LASTEXITCODE -ne 0) {
-        throw "dotnet build failed with exit code $LASTEXITCODE."
+    if (-not $SkipBuild) {
+        & dotnet build $solutionPath --configuration Release --no-restore -p:Version=$Version
+        if ($LASTEXITCODE -ne 0) {
+            throw "dotnet build failed with exit code $LASTEXITCODE."
+        }
     }
 
     if (-not $SkipTests) {

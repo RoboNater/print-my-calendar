@@ -60,7 +60,7 @@ jobs:
 
       - name: Build and verify production installer
         shell: pwsh
-        run: ./eng/build-installer.ps1 -Version $env:RELEASE_VERSION -SkipTests
+        run: ./eng/build-installer.ps1 -Version $env:RELEASE_VERSION -SkipRestore -SkipBuild -SkipTests
 
       - name: Render Letter and A4 print samples
         shell: pwsh

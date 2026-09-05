@@ -35,9 +35,10 @@ Running a newer installer upgrades the existing installation in place. Yahoo Mon
 
 ## Build the installer
 
-Building is supported on Windows 10 or 11 x64. Install the .NET 8 SDK and Inno Setup 6.3 or newer:
+Building is supported on Windows 10 or 11 x64. Install PowerShell 7, the .NET 8 SDK, and Inno Setup 6.3 or newer:
 
 ```powershell
+winget install --id Microsoft.PowerShell --exact
 winget install --id Microsoft.DotNet.SDK.8 --exact
 winget install --id JRSoftware.InnoSetup --exact --scope user
 ```
@@ -53,4 +54,4 @@ The script restores locked dependencies, builds and tests the solution, publishe
 - `artifacts/installer/YahooMonthPrint-Setup.exe`
 - `artifacts/installer/YahooMonthPrint-Setup.exe.sha256`
 
-Pass `-SkipTests` only when iterating locally; release candidates should run the default complete workflow. See [Build and release](release.md) for optional Authenticode signing and release validation.
+Pass `-SkipRestore`, `-SkipBuild`, or `-SkipTests` only when the corresponding work has already completed, as in CI; release candidates should otherwise run the default complete workflow. See [Build and release](release.md) for optional Authenticode signing and release validation.
