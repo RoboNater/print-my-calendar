@@ -48,7 +48,8 @@ public sealed class PrintOverflowPolicyJsonConverter : JsonConverter<PrintOverfl
 
         if (reader.TokenType != JsonTokenType.String)
         {
-            throw new JsonException("The print overflow policy is invalid.");
+            reader.Skip();
+            return PrintOverflowPolicy.ReduceDetailAutomatically;
         }
 
         return reader.GetString() switch
@@ -59,7 +60,7 @@ public sealed class PrintOverflowPolicyJsonConverter : JsonConverter<PrintOverfl
                 or "Use smaller text" => PrintOverflowPolicy.UseSmallerText,
             nameof(PrintOverflowPolicy.PrintDetailsPages)
                 or "Print overflow details on page 2" => PrintOverflowPolicy.PrintDetailsPages,
-            _ => throw new JsonException("The print overflow policy is invalid."),
+            _ => PrintOverflowPolicy.ReduceDetailAutomatically,
         };
     }
 

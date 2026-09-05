@@ -242,6 +242,56 @@ public sealed class YahooCalendarOccurrenceSourceTests : IDisposable
         Assert.False(Assert.Single(Assert.IsType<ApplicationSettings>(store.Saved).Calendars).IsSelected);
     }
 
+    [Fact]
+    public async Task CalendarSelectionFlushCompletesWhenCallerBlocksANonPumpingContext()
+    {
+        var completed = false;
+        Exception? failure = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                SynchronizationContext.SetSynchronizationContext(new NonPumpingSynchronizationContext());
+                var settings = new ApplicationSettings
+                {
+                    YahooAccount = "student@example.test",
+                    Calendars =
+                    [
+                        new SavedCalendar(
+                            "college",
+                            "College",
+                            "https://calendar.example.test/college/",
+                            null,
+                            true),
+                    ],
+                };
+                using var store = new SerializedSettingsStore(new JsonSettingsStore(directory));
+                var source = new YahooCalendarOccurrenceSource(
+                    settings,
+                    new FakeCredentialStore("disposable-app-password"),
+                    store,
+                    new CalendarCacheStore(directory),
+                    new FakeClientFactory(new FakeClient()),
+                    new NullAppLogger());
+
+                source.SetCalendarEnabled("college", false);
+                completed = source.FlushPendingChangesAsync().Wait(TimeSpan.FromSeconds(5));
+            }
+            catch (Exception exception)
+            {
+                failure = exception;
+            }
+        });
+        thread.Start();
+        thread.Join();
+
+        Assert.Null(failure);
+        Assert.True(completed);
+        var saved = await new JsonSettingsStore(directory).LoadAsync(
+            TestContext.Current.CancellationToken);
+        Assert.False(Assert.Single(saved.Calendars).IsSelected);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(directory))
@@ -417,5 +467,14 @@ public sealed class YahooCalendarOccurrenceSourceTests : IDisposable
         }
 
         public Task ClearAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
+    private sealed class NonPumpingSynchronizationContext : SynchronizationContext
+    {
+        public override void Post(SendOrPostCallback callback, object? state)
+        {
+            _ = callback;
+            _ = state;
+        }
     }
 }

@@ -205,14 +205,15 @@ public partial class App : Application, IDisposable
 
             if (settingsWindow.WasDisconnected && !ShowSetupWizard())
             {
-                currentWindow.Close();
+                ShutdownMode = ShutdownMode.OnExplicitShutdown;
+                await CloseWindowAsync(currentWindow);
                 Shutdown(0);
                 return;
             }
 
             settings = await settingsStore.LoadAsync();
             ShowMainWindow(settings);
-            currentWindow.Close();
+            await CloseWindowAsync(currentWindow);
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {
@@ -231,6 +232,30 @@ public partial class App : Application, IDisposable
         var source = new FakeCalendarOccurrenceSource();
         var viewModel = new MainWindowViewModel(source);
         return new MainWindow(viewModel);
+    }
+
+    private static Task CloseWindowAsync(Window window)
+    {
+        var completion = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        void OnClosed(object? sender, EventArgs e)
+        {
+            window.Closed -= OnClosed;
+            completion.TrySetResult();
+        }
+
+        window.Closed += OnClosed;
+        try
+        {
+            window.Close();
+        }
+        catch
+        {
+            window.Closed -= OnClosed;
+            throw;
+        }
+
+        return completion.Task;
     }
 
     private static void RemoveLocalApplicationData()

@@ -57,6 +57,41 @@ public sealed class PersistenceServicesTests : IDisposable
     }
 
     [Fact]
+    public async Task UnknownOverflowPolicyDoesNotDiscardOtherSettings()
+    {
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "settings.json");
+        await File.WriteAllTextAsync(
+            path,
+            """
+            {
+              "version": 1,
+              "yahooAccount": "student@example.test",
+              "calendars": [
+                {
+                  "id": "college",
+                  "displayName": "College",
+                  "uri": "https://calendar.example.test/college/",
+                  "color": "#325EA8",
+                  "isSelected": true
+                }
+              ],
+              "maximumDescriptionLines": 7,
+              "overflowPolicy": "FuturePolicyName"
+            }
+            """,
+            TestContext.Current.CancellationToken);
+
+        var settings = await new JsonSettingsStore(directory).LoadAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("student@example.test", settings.YahooAccount);
+        Assert.Equal("college", Assert.Single(settings.Calendars).Id);
+        Assert.Equal(7, settings.MaximumDescriptionLines);
+        Assert.Equal(PrintOverflowPolicy.ReduceDetailAutomatically, settings.OverflowPolicy);
+    }
+
+    [Fact]
     public void SettingsSaveCompletesWhenCallerBlocksANonPumpingContext()
     {
         var completed = false;
