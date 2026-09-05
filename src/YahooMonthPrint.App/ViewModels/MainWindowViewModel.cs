@@ -51,7 +51,13 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             new(DetailLevel.Compact, "Compact"),
             new(DetailLevel.Detailed, "Detailed"),
         ];
-        DescriptionLineOptions = [1, 2, 3, 4];
+        DescriptionLineOptions =
+        [
+            new(1, "1 line"),
+            new(2, "2 lines"),
+            new(3, "3 lines"),
+            new(4, "4 lines"),
+        ];
 
         PreviousMonthCommand = new AsyncRelayCommand(() => NavigateAsync(-1), ReportUnexpectedError);
         NextMonthCommand = new AsyncRelayCommand(() => NavigateAsync(1), ReportUnexpectedError);
@@ -83,7 +89,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public IReadOnlyList<DetailLevelOption> DetailLevelOptions { get; }
 
-    public IReadOnlyList<int> DescriptionLineOptions { get; }
+    public IReadOnlyList<DescriptionLineOption> DescriptionLineOptions { get; }
 
     public ICommand PreviousMonthCommand { get; }
 
@@ -100,6 +106,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public ICommand RestoreAllCommand { get; }
 
     public string DisplayedMonthLabel => displayedMonth.ToString("MMMM yyyy", CultureInfo.CurrentCulture);
+
+    public DateOnly DisplayedMonth => displayedMonth;
+
+    public bool IsDetailed => SelectedDetailLevel == DetailLevel.Detailed;
 
     public string FilterText
     {
@@ -152,6 +162,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             {
                 state = state with { DetailLevel = value };
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(IsDetailed));
                 ApplyVisibility();
             }
         }
@@ -305,6 +316,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         filterCancellation?.Cancel();
         filterCancellation?.Dispose();
     }
+
+    public Task FlushPendingChangesAsync() => source is IPendingCalendarChanges pendingChanges
+        ? pendingChanges.FlushPendingChangesAsync()
+        : Task.CompletedTask;
 
     private async Task NavigateToAsync(DateOnly month)
     {

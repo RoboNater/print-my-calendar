@@ -71,7 +71,15 @@
                     <ComboBox x:Name="OrientationCombo" Width="220" Margin="0,5,0,14" HorizontalAlignment="Left">
                         <ComboBoxItem Content="Landscape" /><ComboBoxItem Content="Portrait" />
                     </ComboBox>
-                    <TextBlock Text="Printing controls take effect in Phase 4." Foreground="#FF5D626B" />
+                    <TextBlock Text="Default overflow handling" />
+                    <ComboBox x:Name="OverflowPolicyCombo" Width="260" Margin="0,5,0,14" HorizontalAlignment="Left">
+                        <ComboBoxItem Content="Reduce detail automatically" />
+                        <ComboBoxItem Content="Use smaller text" />
+                        <ComboBoxItem Content="Print overflow details on page 2" />
+                    </ComboBox>
+                    <TextBlock Foreground="#FF5D626B"
+                               Text="Paper, margins, detail, and font size can also be adjusted in Print Preview."
+                               TextWrapping="Wrap" />
                 </StackPanel>
             </TabItem>
 

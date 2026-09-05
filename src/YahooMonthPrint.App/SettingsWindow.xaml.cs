@@ -42,6 +42,7 @@ public partial class SettingsWindow : Window
             settings.MaximumDescriptionLines.ToString(System.Globalization.CultureInfo.InvariantCulture));
         SelectComboItem(PaperSizeCombo, settings.PaperSize);
         SelectComboItem(OrientationCombo, settings.Orientation);
+        SelectComboItem(OverflowPolicyCombo, settings.OverflowPolicy);
         ShowLocationsCheckBox.IsChecked = settings.ShowLocations;
     }
 
@@ -161,6 +162,7 @@ public partial class SettingsWindow : Window
                 ShowLocations = ShowLocationsCheckBox.IsChecked == true,
                 PaperSize = SelectedValue(PaperSizeCombo),
                 Orientation = SelectedValue(OrientationCombo),
+                OverflowPolicy = SelectedValue(OverflowPolicyCombo),
             };
             await settingsStore.SaveAsync(settings, CancellationToken.None);
             DialogResult = true;
