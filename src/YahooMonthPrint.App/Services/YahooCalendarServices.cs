@@ -51,14 +51,19 @@ public sealed class YahooConnectionService(
         exception);
 }
 
-public sealed class YahooCalendarOccurrenceSource : ICachedCalendarOccurrenceSource, ICalendarSelectionStore
+public sealed class YahooCalendarOccurrenceSource :
+    ICachedCalendarOccurrenceSource,
+    ICalendarSelectionStore,
+    IPendingCalendarChanges
 {
     private readonly ICredentialStore credentialStore;
     private readonly ISettingsStore settingsStore;
     private readonly ICalendarCacheStore cacheStore;
     private readonly IYahooCalDavClientFactory clientFactory;
     private readonly IAppLogger logger;
+    private readonly object pendingSelectionSaveLock = new();
     private ApplicationSettings settings;
+    private Task pendingSelectionSave = Task.CompletedTask;
 
     public YahooCalendarOccurrenceSource(
         ApplicationSettings settings,
@@ -112,11 +117,19 @@ public sealed class YahooCalendarOccurrenceSource : ICachedCalendarOccurrenceSou
         }
 
         Calendars = settings.Calendars.Select(calendar => calendar.ToCalendarSource()).ToArray();
-        _ = settingsStore.SaveAsync(settings).ContinueWith(
-            task => logger.Log("settings", "calendar-selection-save-failed", exception: task.Exception),
-            CancellationToken.None,
-            TaskContinuationOptions.OnlyOnFaulted,
-            TaskScheduler.Default);
+        var snapshot = settings;
+        lock (pendingSelectionSaveLock)
+        {
+            pendingSelectionSave = SaveCalendarSelectionAsync(pendingSelectionSave, snapshot);
+        }
+    }
+
+    public Task FlushPendingChangesAsync()
+    {
+        lock (pendingSelectionSaveLock)
+        {
+            return pendingSelectionSave;
+        }
     }
 
     public async Task<CalendarLoadResult> LoadAsync(
@@ -313,6 +326,19 @@ public sealed class YahooCalendarOccurrenceSource : ICachedCalendarOccurrenceSou
         "A saved Yahoo calendar address is invalid. Reconnect the account and try again.",
         exception.GetType().Name,
         exception);
+
+    private async Task SaveCalendarSelectionAsync(Task previousSave, ApplicationSettings snapshot)
+    {
+        try
+        {
+            await previousSave.ConfigureAwait(false);
+            await settingsStore.SaveAsync(snapshot).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            logger.Log("settings", "calendar-selection-save-failed", exception: exception);
+        }
+    }
 
     private sealed class InvalidSavedCalendarException(string calendarId, string calendarName)
         : UriFormatException("A saved calendar address is not an absolute HTTPS URI.")

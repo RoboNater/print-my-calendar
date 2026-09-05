@@ -82,6 +82,33 @@ public sealed class PersistenceServicesTests : IDisposable
     }
 
     [Fact]
+    public async Task CacheCanRestoreASelectedSubsetWithoutShowingDisabledCalendars()
+    {
+        var store = new CalendarCacheStore(directory);
+        var range = MonthGrid.Create(2026, 9);
+        var college = CreateOccurrence();
+        var personal = new CalendarOccurrence(
+            "personal",
+            "personal-event",
+            college.Start,
+            college.End,
+            false,
+            "Personal event");
+        await store.WriteAsync(
+            range,
+            ["college", "personal"],
+            new CalendarLoadResult([college, personal], DateTimeOffset.Now),
+            TestContext.Current.CancellationToken);
+
+        var loaded = await store.TryReadAsync(
+            range,
+            ["college"],
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(college, Assert.Single(Assert.IsType<CalendarLoadResult>(loaded).Occurrences));
+    }
+
+    [Fact]
     public async Task CorruptCacheIsQuarantinedAndClearDoesNotTouchSettings()
     {
         Directory.CreateDirectory(directory);

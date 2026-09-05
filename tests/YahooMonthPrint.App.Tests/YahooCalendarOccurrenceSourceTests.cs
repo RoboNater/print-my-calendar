@@ -207,6 +207,41 @@ public sealed class YahooCalendarOccurrenceSourceTests : IDisposable
         Assert.Equal(range.Start, source.CachedRange?.Start);
     }
 
+    [Fact]
+    public async Task PendingCalendarSelectionWriteCanBeFlushedBeforeShutdown()
+    {
+        var settings = new ApplicationSettings
+        {
+            YahooAccount = "student@example.test",
+            Calendars =
+            [
+                new SavedCalendar(
+                    "college",
+                    "College",
+                    "https://calendar.example.test/college/",
+                    null,
+                    true),
+            ],
+        };
+        var store = new BlockingSelectionSettingsStore();
+        var source = new YahooCalendarOccurrenceSource(
+            settings,
+            new FakeCredentialStore("disposable-app-password"),
+            store,
+            new CalendarCacheStore(directory),
+            new FakeClientFactory(new FakeClient()),
+            new NullAppLogger());
+
+        source.SetCalendarEnabled("college", false);
+        await store.SaveStarted.Task.WaitAsync(TestContext.Current.CancellationToken);
+        var flush = source.FlushPendingChangesAsync();
+
+        Assert.False(flush.IsCompleted);
+        store.AllowSave.TrySetResult();
+        await flush;
+        Assert.False(Assert.Single(Assert.IsType<ApplicationSettings>(store.Saved).Calendars).IsSelected);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(directory))
@@ -357,5 +392,30 @@ public sealed class YahooCalendarOccurrenceSourceTests : IDisposable
                 new CalendarLoadException(
                     CalendarLoadFailureKind.Connectivity,
                     "Yahoo Calendar could not be reached."));
+    }
+
+    private sealed class BlockingSelectionSettingsStore : ISettingsStore
+    {
+        public TaskCompletionSource SaveStarted { get; } = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource AllowSave { get; } = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public ApplicationSettings? Saved { get; private set; }
+
+        public Task<ApplicationSettings> LoadAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(new ApplicationSettings());
+
+        public async Task SaveAsync(
+            ApplicationSettings settings,
+            CancellationToken cancellationToken = default)
+        {
+            SaveStarted.TrySetResult();
+            await AllowSave.Task.WaitAsync(cancellationToken);
+            Saved = settings;
+        }
+
+        public Task ClearAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }
