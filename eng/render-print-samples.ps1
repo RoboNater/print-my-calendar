@@ -8,6 +8,10 @@ $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $resolvedExecutable = (Resolve-Path -LiteralPath (Join-Path $repositoryRoot $ExecutablePath)).Path
 $resolvedOutput = [System.IO.Path]::GetFullPath((Join-Path $repositoryRoot $OutputDirectory))
+if (Test-Path -LiteralPath $resolvedOutput -PathType Container) {
+    Get-ChildItem -LiteralPath $resolvedOutput -Filter 'september-2026-*-page-*.png' -File |
+        Remove-Item -Force
+}
 
 $process = Start-Process `
     -FilePath $resolvedExecutable `
