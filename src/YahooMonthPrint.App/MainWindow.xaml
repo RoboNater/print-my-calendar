@@ -75,11 +75,24 @@
                               ItemsSource="{Binding DetailLevelOptions}"
                               SelectedValue="{Binding SelectedDetailLevel}"
                               SelectedValuePath="Value" />
-                    <ComboBox Width="50"
+                    <ComboBox Width="80"
                               Margin="3"
                               AutomationProperties.Name="Maximum description lines"
+                              DisplayMemberPath="Label"
                               ItemsSource="{Binding DescriptionLineOptions}"
-                              SelectedItem="{Binding MaximumDescriptionLines}" />
+                              SelectedValue="{Binding MaximumDescriptionLines}"
+                              SelectedValuePath="Value">
+                        <ComboBox.Style>
+                            <Style TargetType="ComboBox">
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsDetailed}" Value="False">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ComboBox.Style>
+                    </ComboBox>
                     <CheckBox Margin="8,0"
                               VerticalAlignment="Center"
                               Content="_Locations"
@@ -89,6 +102,11 @@
                             Content="↻ Re_fresh"
                             Style="{StaticResource ToolbarButton}"
                             ToolTip="Refresh the visible month from Yahoo" />
+                    <Button AutomationProperties.Name="Preview and print calendar"
+                            Click="OnPrintClicked"
+                            Content="_Print…"
+                            Style="{StaticResource ToolbarButton}"
+                            ToolTip="Preview and print the visible calendar" />
                     <Button AutomationProperties.Name="Open settings"
                             Click="OnSettingsClicked"
                             Content="_Settings"

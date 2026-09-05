@@ -59,13 +59,16 @@ public sealed class CalendarCacheStore : ICalendarCacheStore
             if (document is not { Version: CurrentVersion }
                 || document.RangeStart != range.Start
                 || document.RangeEndExclusive != range.EndExclusive
-                || !SameCalendars(document.CalendarIds, calendarIds))
+                || !ContainsEveryRequestedCalendar(document.CalendarIds, calendarIds))
             {
                 return null;
             }
 
             return new CalendarLoadResult(
-                document.Occurrences.Select(item => item.ToOccurrence()).ToArray(),
+                document.Occurrences
+                    .Where(item => calendarIds.Contains(item.CalendarId, StringComparer.Ordinal))
+                    .Select(item => item.ToOccurrence())
+                    .ToArray(),
                 document.RefreshedAt,
                 document.UnreadableResourceCount,
                 isFromCache: true);
@@ -104,10 +107,10 @@ public sealed class CalendarCacheStore : ICalendarCacheStore
         return Task.CompletedTask;
     }
 
-    private static bool SameCalendars(
+    private static bool ContainsEveryRequestedCalendar(
         IReadOnlyCollection<string> cached,
-        IReadOnlyCollection<string> requested) =>
-        cached.Order(StringComparer.Ordinal).SequenceEqual(requested.Order(StringComparer.Ordinal));
+        IReadOnlyCollection<string> requested) => requested.All(calendarId =>
+            cached.Contains(calendarId, StringComparer.Ordinal));
 
     private void QuarantineUnreadableCache()
     {

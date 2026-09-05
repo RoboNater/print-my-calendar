@@ -8,7 +8,7 @@ Developer setup and validation instructions are in [`docs/development.md`](docs/
 
 ## Current implementation
 
-Phase 3 adds the secure, read-only Yahoo CalDAV connection, recurrence expansion, first-run setup, Windows Credential Manager integration, settings, diagnostics, and an offline cache. Run the normal application with:
+Phase 4 adds WYSIWYG print preview/output, measured overflow handling, Letter/A4 support, a self-contained per-user installer, checksummed CI artifacts, and optional release signing. Run the normal application with:
 
 ```powershell
 dotnet run --project src/YahooMonthPrint.App/YahooMonthPrint.App.csproj
@@ -20,4 +20,4 @@ For UI development without a Yahoo account, retain the deterministic college sch
 dotnet run --project src/YahooMonthPrint.App/YahooMonthPrint.App.csproj -- --demo
 ```
 
-Both modes support month navigation, three detail levels, text/calendar/title filtering, and occurrence-only hide/restore behavior. Printing remains Phase 4 scope.
+Both modes support month navigation, three detail levels, text/calendar/title filtering, occurrence-only hide/restore behavior, print preview, and Windows printing. The preview and printer use the same deterministic `FixedDocument`; filtered or hidden occurrences never enter the print model.

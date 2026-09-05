@@ -24,6 +24,20 @@ public sealed class MainWindowViewModelTests
         var exam = AllVisible(viewModel).Single(item => item.DescriptionText.Contains("EXAM 2", StringComparison.Ordinal));
         Assert.Contains("Bring calculator", exam.DescriptionText, StringComparison.Ordinal);
         Assert.Equal(3, exam.DescriptionText.Split(Environment.NewLine).Length);
+        Assert.Equal(["1 line", "2 lines", "3 lines", "4 lines"], viewModel.DescriptionLineOptions.Select(item => item.Label));
+        Assert.True(viewModel.IsDetailed);
+    }
+
+    [Fact]
+    public void DescriptionLineControlStateTracksDetailedMode()
+    {
+        using var viewModel = CreateViewModel();
+
+        viewModel.SelectedDetailLevel = DetailLevel.Compact;
+        Assert.False(viewModel.IsDetailed);
+
+        viewModel.SelectedDetailLevel = DetailLevel.Detailed;
+        Assert.True(viewModel.IsDetailed);
     }
 
     [Fact]

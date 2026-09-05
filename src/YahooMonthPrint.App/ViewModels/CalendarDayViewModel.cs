@@ -34,3 +34,5 @@ public sealed record HiddenOccurrenceViewModel(
     RelayCommand RestoreCommand);
 
 public sealed record DetailLevelOption(DetailLevel Value, string Label);
+
+public sealed record DescriptionLineOption(int Value, string Label);

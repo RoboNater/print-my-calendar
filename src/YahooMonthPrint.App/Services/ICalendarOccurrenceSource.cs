@@ -28,3 +28,8 @@ public interface ICalendarSelectionStore
 {
     void SetCalendarEnabled(string calendarId, bool isEnabled);
 }
+
+public interface IPendingCalendarChanges
+{
+    Task FlushPendingChangesAsync();
+}

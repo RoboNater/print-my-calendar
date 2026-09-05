@@ -18,10 +18,10 @@ public sealed class SerializedSettingsStore(ISettingsStore inner) : ISettingsSto
 
     public async Task<ApplicationSettings> LoadAsync(CancellationToken cancellationToken = default)
     {
-        await gate.WaitAsync(cancellationToken);
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            return await inner.LoadAsync(cancellationToken);
+            return await inner.LoadAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -33,10 +33,10 @@ public sealed class SerializedSettingsStore(ISettingsStore inner) : ISettingsSto
         ApplicationSettings settings,
         CancellationToken cancellationToken = default)
     {
-        await gate.WaitAsync(cancellationToken);
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            await inner.SaveAsync(settings, cancellationToken);
+            await inner.SaveAsync(settings, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -46,10 +46,10 @@ public sealed class SerializedSettingsStore(ISettingsStore inner) : ISettingsSto
 
     public async Task ClearAsync(CancellationToken cancellationToken = default)
     {
-        await gate.WaitAsync(cancellationToken);
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            await inner.ClearAsync(cancellationToken);
+            await inner.ClearAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -89,7 +89,7 @@ public sealed class JsonSettingsStore : ISettingsStore
             var settings = await JsonSerializer.DeserializeAsync<ApplicationSettings>(
                 stream,
                 SerializerOptions,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
             return settings is { Version: ApplicationSettings.CurrentVersion }
                 ? settings
                 : new ApplicationSettings();
@@ -105,7 +105,8 @@ public sealed class JsonSettingsStore : ISettingsStore
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        await AtomicJsonFile.WriteAsync(path, settings, SerializerOptions, cancellationToken);
+        await AtomicJsonFile.WriteAsync(path, settings, SerializerOptions, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public Task ClearAsync(CancellationToken cancellationToken = default)
@@ -135,16 +136,18 @@ internal static class AtomicJsonFile
         var temporaryPath = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
         try
         {
-            await using (var stream = new FileStream(
+            var stream = new FileStream(
                 temporaryPath,
                 FileMode.CreateNew,
                 FileAccess.Write,
                 FileShare.None,
                 4096,
-                FileOptions.WriteThrough | FileOptions.Asynchronous))
+                FileOptions.WriteThrough | FileOptions.Asynchronous);
+            await using (stream.ConfigureAwait(false))
             {
-                await JsonSerializer.SerializeAsync(stream, value, options, cancellationToken);
-                await stream.FlushAsync(cancellationToken);
+                await JsonSerializer.SerializeAsync(stream, value, options, cancellationToken)
+                    .ConfigureAwait(false);
+                await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
             }
 
             File.Move(temporaryPath, path, true);

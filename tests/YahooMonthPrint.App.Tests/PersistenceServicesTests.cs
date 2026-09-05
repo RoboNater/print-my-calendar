@@ -1,6 +1,7 @@
 using System.IO;
 using YahooMonthPrint.App.Services;
 using YahooMonthPrint.Core;
+using YahooMonthPrint.Printing;
 using YahooMonthPrint.YahooCalDav;
 
 namespace YahooMonthPrint.App.Tests;
@@ -31,6 +32,89 @@ public sealed class PersistenceServicesTests : IDisposable
         Assert.DoesNotContain(Secret, json, StringComparison.Ordinal);
         Assert.DoesNotContain("password", json, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(Directory.GetFiles(directory, "*.tmp"));
+    }
+
+    [Fact]
+    public async Task LegacyOverflowLabelMigratesToStableEnumName()
+    {
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "settings.json");
+        await File.WriteAllTextAsync(
+            path,
+            """
+            { "version": 1, "overflowPolicy": "Print overflow details on page 2" }
+            """,
+            TestContext.Current.CancellationToken);
+        var store = new JsonSettingsStore(directory);
+
+        var settings = await store.LoadAsync(TestContext.Current.CancellationToken);
+        await store.SaveAsync(settings, TestContext.Current.CancellationToken);
+        var savedJson = await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken);
+
+        Assert.Equal(PrintOverflowPolicy.PrintDetailsPages, settings.OverflowPolicy);
+        Assert.Contains("PrintDetailsPages", savedJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("Print overflow details on page 2", savedJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task UnknownOverflowPolicyDoesNotDiscardOtherSettings()
+    {
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "settings.json");
+        await File.WriteAllTextAsync(
+            path,
+            """
+            {
+              "version": 1,
+              "yahooAccount": "student@example.test",
+              "calendars": [
+                {
+                  "id": "college",
+                  "displayName": "College",
+                  "uri": "https://calendar.example.test/college/",
+                  "color": "#325EA8",
+                  "isSelected": true
+                }
+              ],
+              "maximumDescriptionLines": 7,
+              "overflowPolicy": "FuturePolicyName"
+            }
+            """,
+            TestContext.Current.CancellationToken);
+
+        var settings = await new JsonSettingsStore(directory).LoadAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("student@example.test", settings.YahooAccount);
+        Assert.Equal("college", Assert.Single(settings.Calendars).Id);
+        Assert.Equal(7, settings.MaximumDescriptionLines);
+        Assert.Equal(PrintOverflowPolicy.ReduceDetailAutomatically, settings.OverflowPolicy);
+    }
+
+    [Fact]
+    public void SettingsSaveCompletesWhenCallerBlocksANonPumpingContext()
+    {
+        var completed = false;
+        Exception? failure = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                SynchronizationContext.SetSynchronizationContext(new NonPumpingSynchronizationContext());
+                completed = new JsonSettingsStore(directory)
+                    .SaveAsync(CreateSettings(), CancellationToken.None)
+                    .Wait(TimeSpan.FromSeconds(5));
+            }
+            catch (Exception exception)
+            {
+                failure = exception;
+            }
+        });
+        thread.Start();
+        thread.Join();
+
+        Assert.Null(failure);
+        Assert.True(completed);
     }
 
     [Fact]
@@ -79,6 +163,33 @@ public sealed class PersistenceServicesTests : IDisposable
             range,
             ["college", "personal"],
             TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task CacheCanRestoreASelectedSubsetWithoutShowingDisabledCalendars()
+    {
+        var store = new CalendarCacheStore(directory);
+        var range = MonthGrid.Create(2026, 9);
+        var college = CreateOccurrence();
+        var personal = new CalendarOccurrence(
+            "personal",
+            "personal-event",
+            college.Start,
+            college.End,
+            false,
+            "Personal event");
+        await store.WriteAsync(
+            range,
+            ["college", "personal"],
+            new CalendarLoadResult([college, personal], DateTimeOffset.Now),
+            TestContext.Current.CancellationToken);
+
+        var loaded = await store.TryReadAsync(
+            range,
+            ["college"],
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(college, Assert.Single(Assert.IsType<CalendarLoadResult>(loaded).Occurrences));
     }
 
     [Fact]
@@ -271,6 +382,15 @@ public sealed class PersistenceServicesTests : IDisposable
         {
             current = new ApplicationSettings();
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class NonPumpingSynchronizationContext : SynchronizationContext
+    {
+        public override void Post(SendOrPostCallback callback, object? state)
+        {
+            _ = callback;
+            _ = state;
         }
     }
 }
