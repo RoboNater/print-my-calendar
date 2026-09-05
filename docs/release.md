@@ -9,15 +9,10 @@
 From a clean checkout:
 
 ```powershell
-dotnet restore YahooMonthPrint.sln --locked-mode
-dotnet build YahooMonthPrint.sln --configuration Release --no-restore
-dotnet test YahooMonthPrint.sln --configuration Release --no-build
-dotnet publish src/YahooMonthPrint.App/YahooMonthPrint.App.csproj --configuration Release --runtime win-x64 --self-contained true --no-restore --output artifacts/publish/win-x64 -p:Version=1.0.0 -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
-./eng/verify-self-contained.ps1
-./eng/package-release.ps1 -Version 1.0.0
+./eng/build-installer.ps1 -Version 1.0.0
 ```
 
-The final files are `artifacts/installer/YahooMonthPrint-Setup.exe` and its `.sha256` checksum. The installer uses lowest privileges, installs under `%LOCALAPPDATA%\Programs\YahooMonthPrint`, registers an uninstaller, creates a Start Menu shortcut, and offers an optional desktop shortcut.
+The script restores locked dependencies, builds and tests, publishes and verifies the self-contained application, and packages it. The final files are `artifacts/installer/YahooMonthPrint-Setup.exe` and its `.sha256` checksum. The installer uses lowest privileges, installs under `%LOCALAPPDATA%\Programs\YahooMonthPrint`, registers an uninstaller, creates a Start Menu shortcut, and offers an optional desktop shortcut. End-user requirements and installation behavior are documented in [Install Yahoo Month Print](installation.md).
 
 The stable installer AppId supports in-place upgrades/reinstalls. Uninstall runs the installed application's local-cleanup mode before removing program files. The policy is intentionally privacy-first: the Yahoo Credential Manager entry, settings, cache, and logs are removed. Uninstall does not revoke the app password at Yahoo and never changes Yahoo calendar data.
 
@@ -26,7 +21,7 @@ The stable installer AppId supports in-place upgrades/reinstalls. Uninstall runs
 Unsigned development builds are expected. To sign without exposing a PFX password on a process command line, import the code-signing certificate and private key into the release account's current-user certificate store, then pass its SHA-1 thumbprint and the Windows SDK `signtool.exe` path:
 
 ```powershell
-./eng/package-release.ps1 -Version 1.0.0 -SignToolPath <signtool.exe> -SigningCertificateThumbprint <40-character-thumbprint>
+./eng/build-installer.ps1 -Version 1.0.0 -SignToolPath <signtool.exe> -SigningCertificateThumbprint <40-character-thumbprint>
 ```
 
 The script signs the published executable before packaging and the installer afterward, using SHA-256 and HTTPS timestamping. It fails if signing was requested but any required input is unavailable. Certificate import and private-key access are release-environment responsibilities; never commit or print certificate material or passwords.

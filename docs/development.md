@@ -44,6 +44,14 @@ The default check validates required build, PR-delivery, and packaging tools and
 
 ## Restore, build, test, and publish
 
+To produce a complete unsigned installer from a clean checkout, use the single-command workflow documented in [Install Yahoo Month Print](installation.md):
+
+```powershell
+./eng/build-installer.ps1 -Version 1.0.0
+```
+
+For individual development and validation steps, use:
+
 ```powershell
 dotnet restore YahooMonthPrint.sln
 dotnet format YahooMonthPrint.sln --verify-no-changes --no-restore

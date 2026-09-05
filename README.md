@@ -5,6 +5,7 @@ Yahoo Month Print is a read-only Windows desktop application for viewing and pri
 The product requirements are in [`yahoo-month-print-spec.md`](yahoo-month-print-spec.md), and the phased delivery plan is in [`dev-notes/implementation-plan.md`](dev-notes/implementation-plan.md).
 
 Developer setup and validation instructions are in [`docs/development.md`](docs/development.md).
+Installer build and end-user installation instructions are in [`docs/installation.md`](docs/installation.md).
 
 ## Current implementation
 
