@@ -69,6 +69,37 @@ dotnet run --project src/YahooMonthPrint.App/YahooMonthPrint.App.csproj --config
 
 The `--smoke-test` option constructs the WPF shell, validates XAML/application startup, and exits without showing a persistent window. `verify-self-contained.ps1` additionally points the x64 and general `DOTNET_ROOT` variables at a deliberately absent directory, disables machine-wide runtime lookup, requires a successful exit, and requires the host's semantic self-contained decision in its trace. Other trace wording is supplemental and does not fail the build. `render-print-samples.ps1` waits for the GUI-subsystem process, checks its exit code, and verifies deterministic Letter/A4 PNG reviews of the fake September 2026 schedule without connecting to Yahoo.
 
+## Print page geometry
+
+The most recent choice the user made wins. Paper size, orientation, and destination selected in the
+Windows print dialog -- including in the driver's own Printing Preferences behind it -- are read back
+into the preview, which re-renders and then prints in the same action. The user never has to find
+Print a second time, and the preview keeps showing what is about to come out of the printer.
+
+Three details are deliberate:
+
+- The page ticket is built by merging the requested paper and orientation into the selected queue's
+  own print ticket and validating the result, both before the dialog is shown and again on the page
+  setup adopted from it. A ticket carrying only an orientation and a dimensionless media name is
+  incomplete, and drivers are free to discard it in favour of their saved page setup, which is how a
+  requested landscape job could come back as portrait.
+- The printer's unprintable border is read while the preview is built, per printer *and* per paper
+  and orientation, so the preview already shows margins the printer can honour. Imageable areas are
+  reported in converted device units and routinely miss a requested margin by hundredths of a DIP, so
+  `PrinterPageNegotiation.MarginToleranceDips` decides what counts as a real change. Below that
+  tolerance nothing is re-rendered and the user is not told.
+- Adopting a different page setup can re-flow the calendar onto more sheets than the preview showed.
+  Extra paper is the one consequence worth interrupting for, so that alone raises a confirmation.
+  Under the default `ReduceDetailAutomatically` overflow policy the page count usually holds steady,
+  because reduction absorbs the reflow.
+
+An adopted page setup applies to the print in progress. It is not written back to saved settings,
+which continue to come from the Settings window.
+
+Manual checks for a physical printer: print Letter and A4 in both orientations at 0.25 in margins and
+confirm each prints on the first press of Print, in the orientation the preview showed; then change
+orientation in the driver's own Preferences and confirm the preview follows it and the sheet matches.
+
 ## Optional dependency checks
 
 Run these before changing a pinned package version:
