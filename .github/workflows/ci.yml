@@ -70,7 +70,8 @@ jobs:
         run: ./eng/package-release.ps1 -Version $env:RELEASE_VERSION
 
       - name: Render Letter and A4 print samples
-        run: ./artifacts/publish/win-x64/YahooMonthPrint.App.exe --render-print-samples artifacts/print-samples
+        shell: pwsh
+        run: ./eng/render-print-samples.ps1
 
       - name: Upload validation artifacts
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6

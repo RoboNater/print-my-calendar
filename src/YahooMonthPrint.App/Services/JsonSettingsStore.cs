@@ -105,7 +105,8 @@ public sealed class JsonSettingsStore : ISettingsStore
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        await AtomicJsonFile.WriteAsync(path, settings, SerializerOptions, cancellationToken);
+        await AtomicJsonFile.WriteAsync(path, settings, SerializerOptions, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public Task ClearAsync(CancellationToken cancellationToken = default)
@@ -135,13 +136,14 @@ internal static class AtomicJsonFile
         var temporaryPath = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
         try
         {
-            await using (var stream = new FileStream(
+            var stream = new FileStream(
                 temporaryPath,
                 FileMode.CreateNew,
                 FileAccess.Write,
                 FileShare.None,
                 4096,
-                FileOptions.WriteThrough | FileOptions.Asynchronous))
+                FileOptions.WriteThrough | FileOptions.Asynchronous);
+            await using (stream.ConfigureAwait(false))
             {
                 await JsonSerializer.SerializeAsync(stream, value, options, cancellationToken)
                     .ConfigureAwait(false);

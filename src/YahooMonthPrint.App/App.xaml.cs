@@ -63,9 +63,9 @@ public partial class App : Application, IDisposable
 
         if (e.Args.Contains("--uninstall-cleanup", StringComparer.Ordinal))
         {
-            ConfigureServices();
             try
             {
+                ConfigureServices();
                 var settings = await settingsStore.LoadAsync();
                 if (!string.IsNullOrWhiteSpace(settings.YahooAccount))
                 {
@@ -79,7 +79,7 @@ public partial class App : Application, IDisposable
             }
             catch (Exception exception) when (exception is not OutOfMemoryException)
             {
-                logger.Log("uninstall", "cleanup-failed", exception: exception);
+                logger?.Log("uninstall", "cleanup-failed", exception: exception);
                 Shutdown(1);
             }
 
@@ -168,7 +168,7 @@ public partial class App : Application, IDisposable
             MaximumDescriptionLines = settings.MaximumDescriptionLines,
             ShowLocations = settings.ShowLocations,
         };
-        var window = new MainWindow(viewModel, settings);
+        var window = new MainWindow(viewModel, settings, logger);
         window.SettingsRequested += OnSettingsRequested;
         MainWindow = window;
         window.Show();

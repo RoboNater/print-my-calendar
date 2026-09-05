@@ -51,7 +51,7 @@ dotnet build YahooMonthPrint.sln --configuration Release --no-restore
 dotnet test YahooMonthPrint.sln --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory artifacts/test-results
 dotnet publish src/YahooMonthPrint.App/YahooMonthPrint.App.csproj --configuration Release --runtime win-x64 --self-contained true --no-restore --output artifacts/publish/win-x64 -p:Version=1.0.0 -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
 ./eng/package-release.ps1 -Version 1.0.0
-./artifacts/publish/win-x64/YahooMonthPrint.App.exe --render-print-samples artifacts/print-samples
+./eng/render-print-samples.ps1
 ```
 
 Use `--locked-mode` for clean/CI validation after lock files have been generated. CI runs the locked restore, build, tests with coverage, vulnerability report, self-contained publish, production installer compile, SHA-256 generation, and Letter/A4 preview rendering on a Windows runner.
@@ -67,7 +67,7 @@ dotnet run --project src/YahooMonthPrint.App/YahooMonthPrint.App.csproj --config
 ./eng/verify-self-contained.ps1
 ```
 
-The `--smoke-test` option constructs the WPF shell, validates XAML/application startup, and exits without showing a persistent window. `verify-self-contained.ps1` additionally points the x64 and general `DOTNET_ROOT` variables at a deliberately absent directory, disables machine-wide runtime lookup, requires a successful exit, and requires the host's semantic self-contained decision in its trace. Other trace wording is supplemental and does not fail the build. The `--render-print-samples` mode writes deterministic PNG reviews of the fake September 2026 schedule without connecting to Yahoo.
+The `--smoke-test` option constructs the WPF shell, validates XAML/application startup, and exits without showing a persistent window. `verify-self-contained.ps1` additionally points the x64 and general `DOTNET_ROOT` variables at a deliberately absent directory, disables machine-wide runtime lookup, requires a successful exit, and requires the host's semantic self-contained decision in its trace. Other trace wording is supplemental and does not fail the build. `render-print-samples.ps1` waits for the GUI-subsystem process, checks its exit code, and verifies deterministic Letter/A4 PNG reviews of the fake September 2026 schedule without connecting to Yahoo.
 
 ## Optional dependency checks
 

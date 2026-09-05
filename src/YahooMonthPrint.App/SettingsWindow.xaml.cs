@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using YahooMonthPrint.App.Services;
 using YahooMonthPrint.Core;
+using YahooMonthPrint.Printing;
 
 namespace YahooMonthPrint.App;
 
@@ -42,7 +43,7 @@ public partial class SettingsWindow : Window
             settings.MaximumDescriptionLines.ToString(System.Globalization.CultureInfo.InvariantCulture));
         SelectComboItem(PaperSizeCombo, settings.PaperSize);
         SelectComboItem(OrientationCombo, settings.Orientation);
-        SelectComboItem(OverflowPolicyCombo, settings.OverflowPolicy);
+        SelectComboItem(OverflowPolicyCombo, settings.OverflowPolicy.ToString());
         ShowLocationsCheckBox.IsChecked = settings.ShowLocations;
     }
 
@@ -162,7 +163,8 @@ public partial class SettingsWindow : Window
                 ShowLocations = ShowLocationsCheckBox.IsChecked == true,
                 PaperSize = SelectedValue(PaperSizeCombo),
                 Orientation = SelectedValue(OrientationCombo),
-                OverflowPolicy = SelectedValue(OverflowPolicyCombo),
+                OverflowPolicy = Enum.Parse<PrintOverflowPolicy>(
+                    SelectedValue(OverflowPolicyCombo)),
             };
             await settingsStore.SaveAsync(settings, CancellationToken.None);
             DialogResult = true;

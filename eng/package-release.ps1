@@ -10,7 +10,8 @@ param(
 
     [string]$SignToolPath,
 
-    [string]$SigningCertificatePath,
+    [ValidatePattern('^[0-9A-Fa-f]{40}$')]
+    [string]$SigningCertificateThumbprint,
 
     [string]$TimestampUrl = 'https://timestamp.digicert.com'
 )
@@ -33,17 +34,15 @@ if (-not (Test-Path -LiteralPath $applicationPath -PathType Leaf)) {
 }
 
 $signingRequested = -not [string]::IsNullOrWhiteSpace($SignToolPath) -or
-    -not [string]::IsNullOrWhiteSpace($SigningCertificatePath)
+    -not [string]::IsNullOrWhiteSpace($SigningCertificateThumbprint)
 if ($signingRequested) {
     if ([string]::IsNullOrWhiteSpace($SignToolPath) -or
         -not (Test-Path -LiteralPath $SignToolPath -PathType Leaf) -or
-        [string]::IsNullOrWhiteSpace($SigningCertificatePath) -or
-        -not (Test-Path -LiteralPath $SigningCertificatePath -PathType Leaf) -or
-        [string]::IsNullOrWhiteSpace($env:YMP_SIGNING_PASSWORD)) {
-        throw 'Signing was requested, but the signing tool, certificate, or YMP_SIGNING_PASSWORD is unavailable.'
+        [string]::IsNullOrWhiteSpace($SigningCertificateThumbprint)) {
+        throw 'Signing was requested, but the signing tool or current-user certificate thumbprint is unavailable.'
     }
 
-    & $SignToolPath sign /fd SHA256 /f $SigningCertificatePath /p $env:YMP_SIGNING_PASSWORD /tr $TimestampUrl /td SHA256 $applicationPath
+    & $SignToolPath sign /fd SHA256 /sha1 $SigningCertificateThumbprint /tr $TimestampUrl /td SHA256 $applicationPath
     if ($LASTEXITCODE -ne 0) {
         throw "Application signing failed with exit code $LASTEXITCODE."
     }
@@ -61,7 +60,7 @@ if (-not (Test-Path -LiteralPath $installerPath -PathType Leaf)) {
 }
 
 if ($signingRequested) {
-    & $SignToolPath sign /fd SHA256 /f $SigningCertificatePath /p $env:YMP_SIGNING_PASSWORD /tr $TimestampUrl /td SHA256 $installerPath
+    & $SignToolPath sign /fd SHA256 /sha1 $SigningCertificateThumbprint /tr $TimestampUrl /td SHA256 $installerPath
     if ($LASTEXITCODE -ne 0) {
         throw "Installer signing failed with exit code $LASTEXITCODE."
     }

@@ -23,20 +23,20 @@ The stable installer AppId supports in-place upgrades/reinstalls. Uninstall runs
 
 ## Optional Authenticode signing
 
-Unsigned development builds are expected. To sign, pass a Windows SDK `signtool.exe` path and a certificate path to `package-release.ps1`, and supply the password only through the protected `YMP_SIGNING_PASSWORD` environment variable:
+Unsigned development builds are expected. To sign without exposing a PFX password on a process command line, import the code-signing certificate and private key into the release account's current-user certificate store, then pass its SHA-1 thumbprint and the Windows SDK `signtool.exe` path:
 
 ```powershell
-./eng/package-release.ps1 -Version 1.0.0 -SignToolPath <signtool.exe> -SigningCertificatePath <certificate.pfx>
+./eng/package-release.ps1 -Version 1.0.0 -SignToolPath <signtool.exe> -SigningCertificateThumbprint <40-character-thumbprint>
 ```
 
-The script signs the published executable before packaging and the installer afterward, using SHA-256 and HTTPS timestamping. It fails if signing was requested but any required input is unavailable. Never commit or print a certificate path, private key, or password.
+The script signs the published executable before packaging and the installer afterward, using SHA-256 and HTTPS timestamping. It fails if signing was requested but any required input is unavailable. Certificate import and private-key access are release-environment responsibilities; never commit or print certificate material or passwords.
 
 ## Visual and clean-machine validation
 
 Generate reviewable Letter and A4 images with:
 
 ```powershell
-./artifacts/publish/win-x64/YahooMonthPrint.App.exe --render-print-samples artifacts/print-samples
+./eng/render-print-samples.ps1
 ```
 
 Before tagging v1.0, install the exact candidate on a clean standard-user Windows 10 or 11 machine. Complete the specification's Yahoo scenario, offline restart, all filters, hide/restore, Letter and A4 preview, Microsoft Print to PDF, another real or virtual printer, cancellation/error handling, upgrade/reinstall, and uninstall. Confirm no UAC or separate .NET install is needed; grayscale output is legible; Yahoo is unchanged; the credential is gone after uninstall; and settings, cache, logs, and artifacts contain no password or Authorization header. Record only sanitized evidence.

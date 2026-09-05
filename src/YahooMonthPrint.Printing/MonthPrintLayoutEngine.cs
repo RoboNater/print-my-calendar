@@ -32,6 +32,7 @@ public sealed class WpfPrintTextMeasurer : IPrintTextMeasurer
             Brushes.Black,
             1);
         formatted.MaxTextWidth = Math.Max(1, width);
+        formatted.LineHeight = fontSizeDips * PrintLayoutMetrics.TextLineHeightMultiplier;
         return Math.Ceiling(formatted.Height);
     }
 }
@@ -42,11 +43,6 @@ public sealed class MonthPrintLayoutEngine(IPrintTextMeasurer? textMeasurer = nu
     public const double StandardEventSpacing = 4;
     public const double TightEventSpacing = 1;
 
-    private const double HeaderHeight = 38;
-    private const double WeekdayHeight = 22;
-    private const double CellPadding = 5;
-    private const double DateHeaderHeight = 18;
-    private const double OverflowMarkerHeight = 16;
     private readonly IPrintTextMeasurer textMeasurer = textMeasurer ?? new WpfPrintTextMeasurer();
 
     public MonthPrintPlan CreatePlan(MonthLayoutModel model)
@@ -77,16 +73,23 @@ public sealed class MonthPrintLayoutEngine(IPrintTextMeasurer? textMeasurer = nu
                 }
             }
 
-            while (options.DescriptionLineLimit > 0)
+            var originalDescriptionLineLimit = options.DescriptionLineLimit;
+            var minimumDescriptionLineLimit = options.DetailLevel == YahooMonthPrint.Core.DetailLevel.TitlesOnly
+                ? 0
+                : 1;
+            while (options.DescriptionLineLimit > minimumDescriptionLineLimit)
             {
                 options = options with { DescriptionLineLimit = options.DescriptionLineLimit - 1 };
-                diagnostics.Add(new(
-                    PrintReductionStep.ReduceDescriptionLines,
-                    $"Description lines were reduced to {options.DescriptionLineLimit}."));
                 if (Fits(model, options, spacing))
                 {
+                    diagnostics.Add(DescriptionReduction(options.DescriptionLineLimit));
                     return CompletePlan(model, options, spacing, diagnostics);
                 }
+            }
+
+            if (options.DescriptionLineLimit != originalDescriptionLineLimit)
+            {
+                diagnostics.Add(DescriptionReduction(options.DescriptionLineLimit));
             }
 
             spacing = TightEventSpacing;
@@ -102,6 +105,7 @@ public sealed class MonthPrintLayoutEngine(IPrintTextMeasurer? textMeasurer = nu
         if (options.OverflowPolicy is PrintOverflowPolicy.ReduceDetailAutomatically
             or PrintOverflowPolicy.UseSmallerText)
         {
+            var originalFontSize = options.BodyFontSizePoints;
             while (options.BodyFontSizePoints > MinimumBodyFontSizePoints)
             {
                 options = options with
@@ -110,13 +114,16 @@ public sealed class MonthPrintLayoutEngine(IPrintTextMeasurer? textMeasurer = nu
                         MinimumBodyFontSizePoints,
                         options.BodyFontSizePoints - 0.5),
                 };
-                diagnostics.Add(new(
-                    PrintReductionStep.ReduceFontSize,
-                    $"Body text was reduced to {options.BodyFontSizePoints:0.#} pt."));
                 if (Fits(model, options, spacing))
                 {
+                    diagnostics.Add(FontReduction(options.BodyFontSizePoints));
                     return CompletePlan(model, options, spacing, diagnostics);
                 }
+            }
+
+            if (options.BodyFontSizePoints != originalFontSize)
+            {
+                diagnostics.Add(FontReduction(options.BodyFontSizePoints));
             }
         }
 
@@ -145,6 +152,14 @@ public sealed class MonthPrintLayoutEngine(IPrintTextMeasurer? textMeasurer = nu
             [],
             diagnostics);
 
+    private static PrintLayoutDiagnostic DescriptionReduction(int lineLimit) => new(
+        PrintReductionStep.ReduceDescriptionLines,
+        $"Description lines were reduced to {lineLimit}.");
+
+    private static PrintLayoutDiagnostic FontReduction(double fontSizePoints) => new(
+        PrintReductionStep.ReduceFontSize,
+        $"Body text was reduced to {fontSizePoints:0.#} pt.");
+
     private MonthPrintPlan OverflowPlan(
         MonthLayoutModel model,
         MonthPrintOptions options,
@@ -153,11 +168,13 @@ public sealed class MonthPrintLayoutEngine(IPrintTextMeasurer? textMeasurer = nu
     {
         var availableHeight = CellContentHeight(model, options);
         var width = CellTextWidth(options);
+        var dateHeaderHeight = MeasureDateHeader(options, width);
+        var overflowMarkerHeight = MeasureOverflowMarker(options, width);
         var days = new List<PrintDayLayout>(model.Days.Count);
         var overflow = new List<PrintOccurrenceModel>();
         foreach (var day in model.Days)
         {
-            var used = DateHeaderHeight;
+            var used = dateHeaderHeight;
             var main = new List<PrintOccurrenceModel>();
             var dayOverflow = new List<PrintOccurrenceModel>();
             var measuredHeights = new List<double>();
@@ -176,7 +193,7 @@ public sealed class MonthPrintLayoutEngine(IPrintTextMeasurer? textMeasurer = nu
                 }
             }
 
-            while (dayOverflow.Count > 0 && main.Count > 0 && used + OverflowMarkerHeight > availableHeight)
+            while (dayOverflow.Count > 0 && main.Count > 0 && used + overflowMarkerHeight > availableHeight)
             {
                 var lastIndex = main.Count - 1;
                 used -= measuredHeights[lastIndex];
@@ -197,7 +214,8 @@ public sealed class MonthPrintLayoutEngine(IPrintTextMeasurer? textMeasurer = nu
         var availableHeight = CellContentHeight(model, options);
         var width = CellTextWidth(options);
         return model.Days.All(day =>
-            DateHeaderHeight + day.Occurrences.Sum(item => MeasureOccurrence(item, options, width) + spacing)
+            MeasureDateHeader(options, width)
+            + day.Occurrences.Sum(item => MeasureOccurrence(item, options, width) + spacing)
             <= availableHeight);
     }
 
@@ -218,20 +236,39 @@ public sealed class MonthPrintLayoutEngine(IPrintTextMeasurer? textMeasurer = nu
             height += textMeasurer.MeasureHeight(occurrence.Location, width, fontSize * 0.88);
         }
 
-        return Math.Ceiling(height + 3);
+        return Math.Ceiling(height);
+    }
+
+    private double MeasureDateHeader(MonthPrintOptions options, double width)
+    {
+        var fontSize = PointsToDips(options.BodyFontSizePoints);
+        return textMeasurer.MeasureHeight("30", width, fontSize, bold: true);
+    }
+
+    private double MeasureOverflowMarker(MonthPrintOptions options, double width)
+    {
+        var fontSize = PointsToDips(options.BodyFontSizePoints);
+        return 1 + textMeasurer.MeasureHeight(
+            "+99 on details page",
+            width,
+            Math.Max(8, fontSize * 0.82),
+            bold: true);
     }
 
     private static double CellContentHeight(MonthLayoutModel model, MonthPrintOptions options) =>
         (options.Page.Height
             - options.Margins.Top
             - options.Margins.Bottom
-            - HeaderHeight
-            - WeekdayHeight)
+            - PrintLayoutMetrics.HeaderHeight
+            - PrintLayoutMetrics.WeekdayHeight)
         / model.Grid.WeekCount
-        - CellPadding * 2;
+        - PrintLayoutMetrics.CellPadding * 2
+        - PrintLayoutMetrics.GridBorderThickness * 2;
 
     private static double CellTextWidth(MonthPrintOptions options) =>
-        (options.Page.Width - options.Margins.Left - options.Margins.Right) / 7 - CellPadding * 2;
+        (options.Page.Width - options.Margins.Left - options.Margins.Right) / 7
+        - PrintLayoutMetrics.CellPadding * 2
+        - PrintLayoutMetrics.GridBorderThickness * 2;
 
     internal static double PointsToDips(double points) => points * 96 / 72;
 }

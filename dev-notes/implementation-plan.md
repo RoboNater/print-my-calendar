@@ -123,7 +123,7 @@ Run from a fresh clone or a clean working tree:
 
 ### Phase 1 PR acceptance gate
 
-- A new contributor can follow `docs/development.md` from a clean Windows environment and reproduce all build/test/publish/package-smoke checks.
+- A new contributor can follow `docs/development.md` from a clean Windows environment and reproduce all build/test/publish/package checks.
 - Project references enforce the intended dependency direction.
 - CI is required and green.
 - No production feature or P1 scope has leaked into the foundation PR.

@@ -2,6 +2,16 @@ using YahooMonthPrint.Core;
 
 namespace YahooMonthPrint.Printing;
 
+public static class PrintLayoutMetrics
+{
+    public const double HeaderHeight = 38;
+    public const double WeekdayHeight = 22;
+    public const double CellPadding = 5;
+    public const double GridBorderThickness = 0.6;
+    public const double DetailsSpacing = 9;
+    public const double TextLineHeightMultiplier = 1.15;
+}
+
 public enum PrintPaperSize
 {
     Letter,

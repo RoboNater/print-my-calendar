@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Globalization;
 using System.Printing;
 using System.Windows;
@@ -12,19 +13,23 @@ public partial class PrintPreviewWindow : Window
 {
     private readonly DateOnly displayedMonth;
     private readonly IReadOnlyList<CalendarOccurrence> visibleOccurrences;
+    private readonly IAppLogger logger;
     private MonthPrintOptions options;
     private RenderedMonthDocument rendered = null!;
+    private PrintMargins? printerMinimumMargins;
     private bool initialized;
 
     public PrintPreviewWindow(
         DateOnly displayedMonth,
         IReadOnlyList<CalendarOccurrence> visibleOccurrences,
-        MonthPrintOptions options)
+        MonthPrintOptions options,
+        IAppLogger? logger = null)
     {
         this.displayedMonth = displayedMonth;
         this.visibleOccurrences = visibleOccurrences
             ?? throw new ArgumentNullException(nameof(visibleOccurrences));
         this.options = options ?? throw new ArgumentNullException(nameof(options));
+        this.logger = logger ?? new NullAppLogger();
 
         InitializeComponent();
         LoadPrinters();
@@ -62,19 +67,13 @@ public partial class PrintPreviewWindow : Window
             out var savedOrientation)
             ? savedOrientation
             : PrintPageOrientation.Landscape;
-        var overflow = settings.OverflowPolicy switch
-        {
-            "Use smaller text" => PrintOverflowPolicy.UseSmallerText,
-            "Print overflow details on page 2" => PrintOverflowPolicy.PrintDetailsPages,
-            _ => PrintOverflowPolicy.ReduceDetailAutomatically,
-        };
         return new MonthPrintOptions
         {
             Page = PrintPageGeometry.Create(paper, orientation),
             DetailLevel = detailLevel,
             DescriptionLineLimit = descriptionLines,
             ShowLocations = showLocations,
-            OverflowPolicy = overflow,
+            OverflowPolicy = settings.OverflowPolicy,
         };
     }
 
@@ -94,14 +93,30 @@ public partial class PrintPreviewWindow : Window
                 name,
                 defaultName,
                 StringComparison.OrdinalIgnoreCase));
-            PrinterCombo.SelectedIndex = PrinterCombo.SelectedIndex < 0 && names.Length > 0 ? 0 : PrinterCombo.SelectedIndex;
+            if (PrinterCombo.SelectedIndex < 0 && names.Length > 0)
+            {
+                PrinterCombo.SelectedIndex = 0;
+            }
         }
-        catch (PrintSystemException)
+        catch (Exception exception) when (IsPrinterDiscoveryFailure(exception))
         {
+            logger.Log("printing", "printer-discovery-failed", exception: exception);
             PrinterCombo.ItemsSource = new[] { "Choose in Windows print dialog" };
             PrinterCombo.SelectedIndex = 0;
             PrinterCombo.IsEnabled = false;
         }
+    }
+
+    private void OnPrinterChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!initialized)
+        {
+            return;
+        }
+
+        printerMinimumMargins = null;
+        MarginsCombo.ToolTip = null;
+        RebuildPreview();
     }
 
     private void OnOptionsChanged(object sender, RoutedEventArgs e)
@@ -125,10 +140,11 @@ public partial class PrintPreviewWindow : Window
             : SmallerTextRadio.IsChecked == true
                 ? PrintOverflowPolicy.UseSmallerText
                 : PrintOverflowPolicy.PrintDetailsPages;
+        var requestedMargins = new PrintMargins(margin, margin, margin, margin);
         options = options with
         {
             Page = PrintPageGeometry.Create(paper, orientation),
-            Margins = new PrintMargins(margin, margin, margin, margin),
+            Margins = ApplyPrinterMinimum(requestedMargins),
             DetailLevel = detail,
             DescriptionLineLimit = lines,
             BodyFontSizePoints = fontSize,
@@ -186,7 +202,9 @@ public partial class PrintPreviewWindow : Window
                 return;
             }
 
-            if (AdjustForPrinterTicket(dialog) || AdjustForPrinterImageableArea(dialog))
+            var printerTicketChanged = AdjustForPrinterTicket(dialog);
+            var imageableAreaChanged = AdjustForPrinterImageableArea(dialog);
+            if (printerTicketChanged || imageableAreaChanged)
             {
                 MessageBox.Show(
                     this,
@@ -203,12 +221,17 @@ public partial class PrintPreviewWindow : Window
         }
         catch (PrintSystemException exception)
         {
-            _ = exception;
+            logger.Log("printing", "print-failed", exception: exception);
             ShowPrintError();
         }
         catch (InvalidOperationException exception)
         {
-            _ = exception;
+            logger.Log("printing", "print-failed", exception: exception);
+            ShowPrintError();
+        }
+        catch (Win32Exception exception)
+        {
+            logger.Log("printing", "print-failed", exception: exception);
             ShowPrintError();
         }
     }
@@ -233,6 +256,17 @@ public partial class PrintPreviewWindow : Window
         }
 
         options = options with { Page = PrintPageGeometry.Create(paper, orientation) };
+        initialized = false;
+        try
+        {
+            SelectTag(PaperCombo, paper.ToString());
+            SelectTag(OrientationCombo, orientation.ToString());
+        }
+        finally
+        {
+            initialized = true;
+        }
+
         RenderCurrentOptions();
         return true;
     }
@@ -250,16 +284,14 @@ public partial class PrintPreviewWindow : Window
             area.OriginHeight,
             Math.Max(0, options.Page.Width - area.OriginWidth - area.ExtentWidth),
             Math.Max(0, options.Page.Height - area.OriginHeight - area.ExtentHeight));
-        var adjusted = new PrintMargins(
-            Math.Max(options.Margins.Left, required.Left),
-            Math.Max(options.Margins.Top, required.Top),
-            Math.Max(options.Margins.Right, required.Right),
-            Math.Max(options.Margins.Bottom, required.Bottom));
+        var adjusted = ApplyMinimum(options.Margins, required);
         if (adjusted == options.Margins)
         {
             return false;
         }
 
+        printerMinimumMargins = required;
+        MarginsCombo.ToolTip = "The selected printer's imageable area requires wider effective margins.";
         options = options with { Margins = adjusted };
         RenderCurrentOptions();
         return true;
@@ -271,6 +303,22 @@ public partial class PrintPreviewWindow : Window
         "Printing Failed",
         MessageBoxButton.OK,
         MessageBoxImage.Error);
+
+    private PrintMargins ApplyPrinterMinimum(PrintMargins requested) => printerMinimumMargins is null
+        ? requested
+        : ApplyMinimum(requested, printerMinimumMargins);
+
+    private static PrintMargins ApplyMinimum(PrintMargins requested, PrintMargins minimum) => new(
+        Math.Max(requested.Left, minimum.Left),
+        Math.Max(requested.Top, minimum.Top),
+        Math.Max(requested.Right, minimum.Right),
+        Math.Max(requested.Bottom, minimum.Bottom));
+
+    private static bool IsPrinterDiscoveryFailure(Exception exception) => exception is
+        PrintSystemException
+        or Win32Exception
+        or InvalidOperationException
+        or UnauthorizedAccessException;
 
     private void SelectClosestMargin(double inches)
     {

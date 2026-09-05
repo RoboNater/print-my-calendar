@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Windows;
 using YahooMonthPrint.App.Services;
 using YahooMonthPrint.App.ViewModels;
@@ -8,16 +9,23 @@ public partial class MainWindow : Window
 {
     private readonly MainWindowViewModel viewModel;
     private readonly ApplicationSettings printSettings;
+    private readonly IAppLogger logger;
     private bool initialized;
+    private bool closeIsPending;
+    private bool mayClose;
 
-    public MainWindow(MainWindowViewModel viewModel, ApplicationSettings? printSettings = null)
+    public MainWindow(
+        MainWindowViewModel viewModel,
+        ApplicationSettings? printSettings = null,
+        IAppLogger? logger = null)
     {
         this.viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
         this.printSettings = printSettings ?? new ApplicationSettings();
+        this.logger = logger ?? new NullAppLogger();
         DataContext = viewModel;
         InitializeComponent();
         Loaded += OnLoaded;
-        Closed += OnClosed;
+        Closing += OnClosing;
     }
 
     public event EventHandler? SettingsRequested;
@@ -33,10 +41,39 @@ public partial class MainWindow : Window
         _ = InitializeAsync();
     }
 
-    private void OnClosed(object? sender, EventArgs e)
+    private async void OnClosing(object? sender, CancelEventArgs e)
     {
-        viewModel.FlushPendingChangesAsync().GetAwaiter().GetResult();
-        viewModel.Dispose();
+        if (mayClose)
+        {
+            viewModel.Dispose();
+            return;
+        }
+
+        e.Cancel = true;
+        if (closeIsPending)
+        {
+            return;
+        }
+
+        closeIsPending = true;
+        try
+        {
+            await viewModel.FlushPendingChangesAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        catch (TimeoutException exception)
+        {
+            logger.Log("settings", "shutdown-flush-timeout", exception: exception);
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            logger.Log("settings", "shutdown-flush-failed", exception: exception);
+        }
+        finally
+        {
+            mayClose = true;
+            closeIsPending = false;
+            Close();
+        }
     }
 
     private void OnSettingsClicked(object sender, RoutedEventArgs e) =>
@@ -55,7 +92,8 @@ public partial class MainWindow : Window
             var preview = new PrintPreviewWindow(
                 viewModel.DisplayedMonth,
                 viewModel.VisibleOccurrences,
-                options)
+                options,
+                logger)
             {
                 Owner = this,
             };
@@ -63,6 +101,7 @@ public partial class MainWindow : Window
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {
+            logger.Log("printing", "preview-failed", exception: exception);
             MessageBox.Show(
                 this,
                 "The print preview could not be created. Try reducing the detail level and try again.",

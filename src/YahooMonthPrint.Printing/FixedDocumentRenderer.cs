@@ -13,10 +13,6 @@ public sealed record RenderedMonthDocument(FixedDocument Document, MonthPrintPla
 
 public sealed class FixedDocumentRenderer(IPrintTextMeasurer? textMeasurer = null)
 {
-    private const double HeaderHeight = 38;
-    private const double WeekdayHeight = 22;
-    private const double CellPadding = 5;
-    private const double DetailsSpacing = 9;
     private static readonly Brush GridBrush = new SolidColorBrush(Color.FromRgb(118, 118, 118));
     private static readonly Brush SecondaryBrush = new SolidColorBrush(Color.FromRgb(82, 82, 82));
     private static readonly Brush OutOfMonthBrush = new SolidColorBrush(Color.FromRgb(242, 242, 242));
@@ -49,8 +45,8 @@ public sealed class FixedDocumentRenderer(IPrintTextMeasurer? textMeasurer = nul
         var gridHeight = options.Page.Height
             - options.Margins.Top
             - options.Margins.Bottom
-            - HeaderHeight
-            - WeekdayHeight;
+            - PrintLayoutMetrics.HeaderHeight
+            - PrintLayoutMetrics.WeekdayHeight;
         var cellWidth = contentWidth / 7;
         var cellHeight = gridHeight / plan.Model.Grid.WeekCount;
 
@@ -67,7 +63,7 @@ public sealed class FixedDocumentRenderer(IPrintTextMeasurer? textMeasurer = nul
             options.Margins.Left,
             options.Margins.Top,
             contentWidth,
-            HeaderHeight);
+            PrintLayoutMetrics.HeaderHeight);
 
         var weekdays = CultureInfo.CurrentCulture.DateTimeFormat.AbbreviatedDayNames;
         for (var column = 0; column < 7; column++)
@@ -85,9 +81,9 @@ public sealed class FixedDocumentRenderer(IPrintTextMeasurer? textMeasurer = nul
                     Foreground = Brushes.Black,
                 },
                 options.Margins.Left + column * cellWidth,
-                options.Margins.Top + HeaderHeight,
+                options.Margins.Top + PrintLayoutMetrics.HeaderHeight,
                 cellWidth,
-                WeekdayHeight);
+                PrintLayoutMetrics.WeekdayHeight);
         }
 
         for (var index = 0; index < plan.Days.Count; index++)
@@ -98,7 +94,10 @@ public sealed class FixedDocumentRenderer(IPrintTextMeasurer? textMeasurer = nul
                 page,
                 CreateDayCell(plan.Days[index], plan),
                 options.Margins.Left + column * cellWidth,
-                options.Margins.Top + HeaderHeight + WeekdayHeight + row * cellHeight,
+                options.Margins.Top
+                    + PrintLayoutMetrics.HeaderHeight
+                    + PrintLayoutMetrics.WeekdayHeight
+                    + row * cellHeight,
                 cellWidth,
                 cellHeight);
         }
@@ -111,14 +110,11 @@ public sealed class FixedDocumentRenderer(IPrintTextMeasurer? textMeasurer = nul
         var fontSize = MonthPrintLayoutEngine.PointsToDips(
             plan.EffectiveOptions.BodyFontSizePoints);
         var panel = new StackPanel();
-        panel.Children.Add(new TextBlock
-        {
-            Text = dayLayout.Day.Date.Day.ToString(CultureInfo.CurrentCulture),
-            FontFamily = new FontFamily("Segoe UI"),
-            FontSize = fontSize,
-            FontWeight = FontWeights.SemiBold,
-            Foreground = dayLayout.Day.IsInDisplayedMonth ? Brushes.Black : SecondaryBrush,
-        });
+        panel.Children.Add(Text(
+            dayLayout.Day.Date.Day.ToString(CultureInfo.CurrentCulture),
+            fontSize,
+            dayLayout.Day.IsInDisplayedMonth ? Brushes.Black : SecondaryBrush,
+            FontWeights.SemiBold));
         foreach (var occurrence in dayLayout.MainPageOccurrences)
         {
             panel.Children.Add(CreateOccurrenceBlock(occurrence, plan));
@@ -141,9 +137,9 @@ public sealed class FixedDocumentRenderer(IPrintTextMeasurer? textMeasurer = nul
         return new Border
         {
             BorderBrush = GridBrush,
-            BorderThickness = new Thickness(0.6),
+            BorderThickness = new Thickness(PrintLayoutMetrics.GridBorderThickness),
             Background = dayLayout.Day.IsInDisplayedMonth ? Brushes.White : OutOfMonthBrush,
-            Padding = new Thickness(CellPadding),
+            Padding = new Thickness(PrintLayoutMetrics.CellPadding),
             ClipToBounds = true,
             Child = panel,
         };
@@ -195,24 +191,29 @@ public sealed class FixedDocumentRenderer(IPrintTextMeasurer? textMeasurer = nul
         var availableHeight = options.Page.Height
             - options.Margins.Top
             - options.Margins.Bottom
-            - HeaderHeight;
+            - PrintLayoutMetrics.HeaderHeight;
         var fontSize = Math.Max(
             MonthPrintLayoutEngine.PointsToDips(options.BodyFontSizePoints),
             MonthPrintLayoutEngine.PointsToDips(8));
         var chunks = plan.OverflowOccurrences.SelectMany(item =>
-            SplitDetailsText(DetailsText(item), width, fontSize, availableHeight)).ToArray();
+            SplitDetailsText(
+                DetailsText(item),
+                width,
+                fontSize,
+                availableHeight - PrintLayoutMetrics.DetailsSpacing)).ToArray();
 
         var page = NewDetailsPage(plan);
-        var top = options.Margins.Top + HeaderHeight;
+        var top = options.Margins.Top + PrintLayoutMetrics.HeaderHeight;
         foreach (var chunk in chunks)
         {
-            var height = textMeasurer.MeasureHeight(chunk, width, fontSize) + DetailsSpacing;
+            var height = textMeasurer.MeasureHeight(chunk, width, fontSize)
+                + PrintLayoutMetrics.DetailsSpacing;
             if (top + height > options.Page.Height - options.Margins.Bottom
-                && top > options.Margins.Top + HeaderHeight)
+                && top > options.Margins.Top + PrintLayoutMetrics.HeaderHeight)
             {
                 yield return page;
                 page = NewDetailsPage(plan);
-                top = options.Margins.Top + HeaderHeight;
+                top = options.Margins.Top + PrintLayoutMetrics.HeaderHeight;
             }
 
             AddPositioned(
@@ -300,7 +301,7 @@ public sealed class FixedDocumentRenderer(IPrintTextMeasurer? textMeasurer = nul
             plan.EffectiveOptions.Page.Width
                 - plan.EffectiveOptions.Margins.Left
                 - plan.EffectiveOptions.Margins.Right,
-            HeaderHeight);
+            PrintLayoutMetrics.HeaderHeight);
         return page;
     }
 
@@ -326,7 +327,7 @@ public sealed class FixedDocumentRenderer(IPrintTextMeasurer? textMeasurer = nul
             Foreground = brush,
             TextWrapping = TextWrapping.Wrap,
             LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
-            LineHeight = fontSize * 1.15,
+            LineHeight = fontSize * PrintLayoutMetrics.TextLineHeightMultiplier,
         };
 
     private static void AddPositioned(

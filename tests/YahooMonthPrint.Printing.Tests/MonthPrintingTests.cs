@@ -1,3 +1,6 @@
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Documents;
 using YahooMonthPrint.Core;
 
 namespace YahooMonthPrint.Printing.Tests;
@@ -85,17 +88,17 @@ public sealed class MonthPrintingTests
         var model = MonthLayoutModelBuilder.Build(
             new DateOnly(2026, 9, 1),
             [
-                Occurrence("First", 14, 9, "description", "ROOM"),
-                Occurrence("Second", 14, 10, "description", "ROOM"),
+                Occurrence("First", 14, 9, "line one\nline two\nline three", "ROOM"),
+                Occurrence("Second", 14, 10, "line one\nline two\nline three", "ROOM"),
             ],
-            new MonthPrintOptions { DescriptionLineLimit = 1, ShowLocations = true });
-        var engine = new MonthPrintLayoutEngine(new ConstantTextMeasurer(20));
+            new MonthPrintOptions { DescriptionLineLimit = 3, ShowLocations = true });
+        var engine = new MonthPrintLayoutEngine(new LineCountingTextMeasurer(12));
 
         var plan = engine.CreatePlan(model);
 
         Assert.False(plan.HasOverflow);
         Assert.False(plan.EffectiveOptions.ShowLocations);
-        Assert.Equal(0, plan.EffectiveOptions.DescriptionLineLimit);
+        Assert.Equal(2, plan.EffectiveOptions.DescriptionLineLimit);
         Assert.Equal(
             [PrintReductionStep.RemoveLocation, PrintReductionStep.ReduceDescriptionLines],
             plan.Diagnostics.Select(item => item.Step));
@@ -200,6 +203,61 @@ public sealed class MonthPrintingTests
             width => Assert.Equal(model.RequestedOptions.Page.Width, width));
     }
 
+    [Fact]
+    public void RealMeasurementKeepsRenderedDayContentInsideEveryCell()
+    {
+        var occurrences = Enumerable.Range(0, 28)
+            .Select(index => Occurrence(
+                $"Long event title {index}",
+                14 + index % 3,
+                8 + index % 12,
+                $"First detailed line {index}{Environment.NewLine}Second detailed line with a long unbroken value {new string('x', 80)}",
+                "A deliberately long building and room location"))
+            .ToArray();
+
+        var facts = RunSta(() =>
+        {
+            var options = new MonthPrintOptions
+            {
+                Page = PrintPageGeometry.Create(PrintPaperSize.Letter),
+                BodyFontSizePoints = 11,
+                DescriptionLineLimit = 3,
+                OverflowPolicy = PrintOverflowPolicy.ReduceDetailAutomatically,
+            };
+            var model = MonthLayoutModelBuilder.Build(new DateOnly(2026, 9, 1), occurrences, options);
+            var plan = new MonthPrintLayoutEngine().CreatePlan(model);
+            var rendered = new FixedDocumentRenderer().Render(plan);
+            var page = rendered.Document.Pages[0].Child;
+            page.Measure(new Size(page.Width, page.Height));
+            page.Arrange(new Rect(0, 0, page.Width, page.Height));
+            page.UpdateLayout();
+
+            var overfullCells = page.Children.OfType<Border>().Count(border =>
+            {
+                var contentHeight = border.ActualHeight
+                    - border.BorderThickness.Top
+                    - border.BorderThickness.Bottom
+                    - border.Padding.Top
+                    - border.Padding.Bottom;
+                return ((StackPanel)border.Child).DesiredSize.Height > contentHeight + 0.01;
+            });
+            var detailsPastBottomMargin = rendered.Document.Pages.Skip(1).Count(detailsPage =>
+                detailsPage.Child.Children.Cast<UIElement>().Any(element =>
+                    FixedPage.GetTop(element) + ((FrameworkElement)element).Height
+                    > detailsPage.Child.Height - options.Margins.Bottom + 0.01));
+            return new RenderFidelityFacts(
+                plan.HasOverflow,
+                rendered.PageCount,
+                overfullCells,
+                detailsPastBottomMargin);
+        });
+
+        Assert.True(facts.HasOverflow);
+        Assert.True(facts.PageCount > 1);
+        Assert.Equal(0, facts.OverfullCells);
+        Assert.Equal(0, facts.DetailsPastBottomMargin);
+    }
+
     private static T RunSta<T>(Func<T> action)
     {
         T? result = default;
@@ -253,9 +311,28 @@ public sealed class MonthPrintingTests
         }
     }
 
+    private sealed class LineCountingTextMeasurer(double lineHeight) : IPrintTextMeasurer
+    {
+        public double MeasureHeight(string text, double width, double fontSizeDips, bool bold = false)
+        {
+            _ = width;
+            _ = fontSizeDips;
+            _ = bold;
+            return string.IsNullOrEmpty(text)
+                ? 0
+                : text.Count(character => character == '\n') * lineHeight + lineHeight;
+        }
+    }
+
     private sealed record RenderFacts(
         int PageCount,
         double PageWidth,
         double PageHeight,
         IReadOnlyList<double> PageWidths);
+
+    private sealed record RenderFidelityFacts(
+        bool HasOverflow,
+        int PageCount,
+        int OverfullCells,
+        int DetailsPastBottomMargin);
 }
