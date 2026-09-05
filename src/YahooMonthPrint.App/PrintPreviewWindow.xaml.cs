@@ -11,12 +11,15 @@ namespace YahooMonthPrint.App;
 
 public partial class PrintPreviewWindow : Window
 {
+    private const string PrinterMarginToolTip =
+        "The selected printer's imageable area requires wider effective margins.";
+
     private readonly DateOnly displayedMonth;
     private readonly IReadOnlyList<CalendarOccurrence> visibleOccurrences;
     private readonly IAppLogger logger;
     private MonthPrintOptions options;
     private RenderedMonthDocument rendered = null!;
-    private PrintMargins? printerMinimumMargins;
+    private readonly Dictionary<string, PrintMargins?> printerMinimumMargins = new(StringComparer.Ordinal);
     private bool initialized;
 
     public PrintPreviewWindow(
@@ -114,7 +117,7 @@ public partial class PrintPreviewWindow : Window
             return;
         }
 
-        printerMinimumMargins = null;
+        printerMinimumMargins.Clear();
         MarginsCombo.ToolTip = null;
         RebuildPreview();
     }
@@ -140,11 +143,19 @@ public partial class PrintPreviewWindow : Window
             : SmallerTextRadio.IsChecked == true
                 ? PrintOverflowPolicy.UseSmallerText
                 : PrintOverflowPolicy.PrintDetailsPages;
+        var page = PrintPageGeometry.Create(paper, orientation);
         var requestedMargins = new PrintMargins(margin, margin, margin, margin);
+        var effectiveMargins = PrinterPageNegotiation.ApplyMinimum(
+            requestedMargins,
+            TryGetPrinterMinimumMargins(page));
+        MarginsCombo.ToolTip =
+            PrinterPageNegotiation.DiffersBeyondTolerance(effectiveMargins, requestedMargins)
+                ? PrinterMarginToolTip
+                : null;
         options = options with
         {
-            Page = PrintPageGeometry.Create(paper, orientation),
-            Margins = ApplyPrinterMinimum(requestedMargins),
+            Page = page,
+            Margins = effectiveMargins,
             DetailLevel = detail,
             DescriptionLineLimit = lines,
             BodyFontSizePoints = fontSize,
@@ -190,34 +201,38 @@ public partial class PrintPreviewWindow : Window
                 dialog.PrintQueue = server.GetPrintQueue(printerName);
             }
 
-            dialog.PrintTicket.PageOrientation = options.Page.Orientation == PrintPageOrientation.Landscape
-                ? PageOrientation.Landscape
-                : PageOrientation.Portrait;
-            dialog.PrintTicket.PageMediaSize = new PageMediaSize(
-                options.Page.PaperSize == PrintPaperSize.A4
-                    ? PageMediaSizeName.ISOA4
-                    : PageMediaSizeName.NorthAmericaLetter);
+            dialog.PrintTicket = CreatePageTicket(dialog.PrintQueue, options.Page);
+            var previewedPageCount = rendered.PageCount;
             if (dialog.ShowDialog() != true)
             {
                 return;
             }
 
-            var printerTicketChanged = AdjustForPrinterTicket(dialog);
-            var imageableAreaChanged = AdjustForPrinterImageableArea(dialog);
-            if (printerTicketChanged || imageableAreaChanged)
+            // Whatever the user settled on in the Windows dialog and the driver's own preferences is
+            // their most recent choice, so it wins over the page setup the preview was built with.
+            AdoptDialogPageSetup(dialog);
+            AdoptPrinterImageableArea(dialog);
+
+            // The ticket a driver hands back can be incomplete, and an incomplete ticket is one a
+            // driver may discard in favour of its saved page setup. Re-assert the page setup just
+            // agreed as a validated ticket so the job really carries it.
+            var ticket = CreatePageTicket(dialog.PrintQueue, options.Page);
+            if (!Honours(ticket, options.Page))
             {
-                MessageBox.Show(
-                    this,
-                    "The printer changed the requested paper, orientation, or margins. The preview was updated; review it, then choose Print again.",
-                    "Print Preview Updated",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
+                logger.Log("printing", "printer-rejected-page-setup", dialog.PrintQueue?.FullName);
+                ShowUnsupportedPageSetup();
+                return;
+            }
+
+            dialog.PrintTicket = ticket;
+            if (!ConfirmAdditionalPages(previewedPageCount))
+            {
                 return;
             }
 
             dialog.PrintDocument(
                 rendered.Document.DocumentPaginator,
-                $"Yahoo Month Print — {displayedMonth:MMMM yyyy}");
+                $"Yahoo Month Print \u2014 {displayedMonth:MMMM yyyy}");
         }
         catch (PrintSystemException exception)
         {
@@ -236,7 +251,11 @@ public partial class PrintPreviewWindow : Window
         }
     }
 
-    private bool AdjustForPrinterTicket(PrintDialog dialog)
+    /// <summary>
+    /// Brings the destination, paper, and orientation the user left the Windows print dialog with
+    /// back into the preview, so the preview keeps showing what is about to come out of the printer.
+    /// </summary>
+    private void AdoptDialogPageSetup(PrintDialog dialog)
     {
         var paper = dialog.PrintTicket.PageMediaSize?.PageMediaSizeName switch
         {
@@ -246,56 +265,115 @@ public partial class PrintPreviewWindow : Window
         };
         var orientation = dialog.PrintTicket.PageOrientation switch
         {
-            PageOrientation.Portrait => PrintPageOrientation.Portrait,
-            PageOrientation.Landscape => PrintPageOrientation.Landscape,
+            PageOrientation.Portrait or PageOrientation.ReversePortrait => PrintPageOrientation.Portrait,
+            PageOrientation.Landscape or PageOrientation.ReverseLandscape => PrintPageOrientation.Landscape,
             _ => options.Page.Orientation,
         };
-        if (paper == options.Page.PaperSize && orientation == options.Page.Orientation)
+        var queueName = dialog.PrintQueue?.FullName;
+        var printerChanged = queueName is not null
+            && PrinterCombo.IsEnabled
+            && !string.Equals(
+                PrinterCombo.SelectedItem as string,
+                queueName,
+                StringComparison.OrdinalIgnoreCase)
+            && PrinterCombo.Items.OfType<string>().Contains(queueName, StringComparer.OrdinalIgnoreCase);
+        if (paper == options.Page.PaperSize
+            && orientation == options.Page.Orientation
+            && !printerChanged)
         {
-            return false;
+            return;
         }
 
-        options = options with { Page = PrintPageGeometry.Create(paper, orientation) };
+        logger.Log("printing", "adopted-dialog-page-setup", queueName);
         initialized = false;
         try
         {
             SelectTag(PaperCombo, paper.ToString());
             SelectTag(OrientationCombo, orientation.ToString());
+            if (printerChanged)
+            {
+                PrinterCombo.SelectedItem = queueName;
+                printerMinimumMargins.Clear();
+            }
         }
         finally
         {
             initialized = true;
         }
 
-        RenderCurrentOptions();
-        return true;
+        // Rebuilding rather than re-rendering re-reads the printer's unprintable border for the page
+        // setup just adopted; that border is orientation specific.
+        RebuildPreview();
     }
 
-    private bool AdjustForPrinterImageableArea(PrintDialog dialog)
+    /// <summary>
+    /// Final safety net for the margins, using the queue and ticket the dialog actually settled on.
+    /// It normally finds nothing, because the preview already applied this printer's border.
+    /// </summary>
+    private void AdoptPrinterImageableArea(PrintDialog dialog)
     {
         var area = dialog.PrintQueue.GetPrintCapabilities(dialog.PrintTicket).PageImageableArea;
         if (area is null)
         {
-            return false;
+            return;
         }
 
-        var required = new PrintMargins(
+        var required = PrinterPageNegotiation.RequiredMargins(
+            options.Page,
             area.OriginWidth,
             area.OriginHeight,
-            Math.Max(0, options.Page.Width - area.OriginWidth - area.ExtentWidth),
-            Math.Max(0, options.Page.Height - area.OriginHeight - area.ExtentHeight));
-        var adjusted = ApplyMinimum(options.Margins, required);
-        if (adjusted == options.Margins)
+            area.ExtentWidth,
+            area.ExtentHeight);
+        var adjusted = PrinterPageNegotiation.ApplyMinimum(options.Margins, required);
+        if (!PrinterPageNegotiation.DiffersBeyondTolerance(adjusted, options.Margins))
         {
-            return false;
+            return;
         }
 
-        printerMinimumMargins = required;
-        MarginsCombo.ToolTip = "The selected printer's imageable area requires wider effective margins.";
+        printerMinimumMargins[MinimumMarginKey(dialog.PrintQueue.FullName, options.Page)] = required;
+        MarginsCombo.ToolTip = PrinterMarginToolTip;
         options = options with { Margins = adjusted };
         RenderCurrentOptions();
-        return true;
     }
+
+    /// <summary>
+    /// The adopted page setup can re-flow the calendar onto more sheets than the preview showed.
+    /// Extra paper is the one consequence worth stopping for; anything else prints straight away.
+    /// </summary>
+    private bool ConfirmAdditionalPages(int previewedPageCount)
+    {
+        if (rendered.PageCount <= previewedPageCount)
+        {
+            return true;
+        }
+
+        return MessageBox.Show(
+            this,
+            $"The printer's page setup re-flows the calendar onto {rendered.PageCount} pages instead of {previewedPageCount}. Print all {rendered.PageCount} pages?",
+            "More Pages Than the Preview Showed",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question) == MessageBoxResult.Yes;
+    }
+
+    /// <summary>Confirms a validated ticket really carries the paper and orientation asked for.</summary>
+    private static bool Honours(PrintTicket ticket, PrintPageGeometry page)
+    {
+        var expectedOrientation = page.Orientation == PrintPageOrientation.Landscape
+            ? PageOrientation.Landscape
+            : PageOrientation.Portrait;
+        var expectedMedia = page.PaperSize == PrintPaperSize.A4
+            ? PageMediaSizeName.ISOA4
+            : PageMediaSizeName.NorthAmericaLetter;
+        return ticket.PageOrientation == expectedOrientation
+            && ticket.PageMediaSize?.PageMediaSizeName == expectedMedia;
+    }
+
+    private void ShowUnsupportedPageSetup() => MessageBox.Show(
+        this,
+        "The selected printer cannot print this paper size in this orientation. Choose a different paper size or orientation, then try again.",
+        "Page Setup Not Supported",
+        MessageBoxButton.OK,
+        MessageBoxImage.Warning);
 
     private void ShowPrintError() => MessageBox.Show(
         this,
@@ -304,15 +382,79 @@ public partial class PrintPreviewWindow : Window
         MessageBoxButton.OK,
         MessageBoxImage.Error);
 
-    private PrintMargins ApplyPrinterMinimum(PrintMargins requested) => printerMinimumMargins is null
-        ? requested
-        : ApplyMinimum(requested, printerMinimumMargins);
+    /// <summary>
+    /// Asks the selected printer what it can actually reach for this exact paper and orientation.
+    /// The unprintable border is orientation specific, so the answer is cached per page geometry and
+    /// resolved while the preview is built rather than after the print dialog has already been shown.
+    /// </summary>
+    private PrintMargins? TryGetPrinterMinimumMargins(PrintPageGeometry page)
+    {
+        if (!PrinterCombo.IsEnabled || PrinterCombo.SelectedItem is not string printerName)
+        {
+            return null;
+        }
 
-    private static PrintMargins ApplyMinimum(PrintMargins requested, PrintMargins minimum) => new(
-        Math.Max(requested.Left, minimum.Left),
-        Math.Max(requested.Top, minimum.Top),
-        Math.Max(requested.Right, minimum.Right),
-        Math.Max(requested.Bottom, minimum.Bottom));
+        var key = MinimumMarginKey(printerName, page);
+        if (printerMinimumMargins.TryGetValue(key, out var cached))
+        {
+            return cached;
+        }
+
+        PrintMargins? required = null;
+        try
+        {
+            using var server = new LocalPrintServer();
+            using var queue = server.GetPrintQueue(printerName);
+            var area = queue.GetPrintCapabilities(CreatePageTicket(queue, page)).PageImageableArea;
+            if (area is not null)
+            {
+                required = PrinterPageNegotiation.RequiredMargins(
+                    page,
+                    area.OriginWidth,
+                    area.OriginHeight,
+                    area.ExtentWidth,
+                    area.ExtentHeight);
+            }
+        }
+        catch (Exception exception) when (IsPrinterDiscoveryFailure(exception))
+        {
+            logger.Log("printing", "printer-capabilities-unavailable", exception: exception);
+        }
+
+        printerMinimumMargins[key] = required;
+        return required;
+    }
+
+    private static string MinimumMarginKey(string printerName, PrintPageGeometry page) =>
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"{printerName}|{page.PaperSize}|{page.Orientation}");
+
+    /// <summary>
+    /// Builds a device-valid ticket for the requested page geometry. Merging against the queue's own
+    /// ticket matters: a ticket carrying nothing but an orientation and a dimensionless media name is
+    /// incomplete, and a driver is free to discard it and substitute its own saved page setup, which
+    /// is how a requested landscape job used to come back as portrait.
+    /// </summary>
+    private static PrintTicket CreatePageTicket(PrintQueue? queue, PrintPageGeometry page)
+    {
+        var requested = new PrintTicket
+        {
+            PageOrientation = page.Orientation == PrintPageOrientation.Landscape
+                ? PageOrientation.Landscape
+                : PageOrientation.Portrait,
+            PageMediaSize = new PageMediaSize(
+                page.PaperSize == PrintPaperSize.A4
+                    ? PageMediaSizeName.ISOA4
+                    : PageMediaSizeName.NorthAmericaLetter),
+        };
+        if (queue is null)
+        {
+            return requested;
+        }
+
+        return queue.MergeAndValidatePrintTicket(queue.UserPrintTicket, requested).ValidatedPrintTicket;
+    }
 
     private static bool IsPrinterDiscoveryFailure(Exception exception) => exception is
         PrintSystemException
