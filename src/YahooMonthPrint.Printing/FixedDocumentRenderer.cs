@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
+using System.Windows.Shapes;
 
 namespace YahooMonthPrint.Printing;
 
@@ -16,6 +17,7 @@ public sealed class FixedDocumentRenderer(IPrintTextMeasurer? textMeasurer = nul
     private static readonly SolidColorBrush GridBrush = Frozen(Color.FromRgb(118, 118, 118));
     private static readonly SolidColorBrush SecondaryBrush = Frozen(Color.FromRgb(82, 82, 82));
     private static readonly SolidColorBrush OutOfMonthBrush = Frozen(Color.FromRgb(242, 242, 242));
+    private static readonly SolidColorBrush AlternatingEventBrush = Frozen(Color.FromRgb(242, 246, 250));
     private readonly IPrintTextMeasurer textMeasurer = textMeasurer ?? new WpfPrintTextMeasurer();
 
     public RenderedMonthDocument Render(MonthPrintPlan plan)
@@ -115,9 +117,12 @@ public sealed class FixedDocumentRenderer(IPrintTextMeasurer? textMeasurer = nul
             fontSize,
             dayLayout.Day.IsInDisplayedMonth ? Brushes.Black : SecondaryBrush,
             FontWeights.SemiBold));
-        foreach (var occurrence in dayLayout.MainPageOccurrences)
+        for (var index = 0; index < dayLayout.MainPageOccurrences.Count; index++)
         {
-            panel.Children.Add(CreateOccurrenceBlock(occurrence, plan));
+            panel.Children.Add(CreateOccurrenceBlock(
+                dayLayout.MainPageOccurrences[index],
+                plan,
+                index));
         }
 
         if (dayLayout.OverflowCount > 0)
@@ -144,36 +149,75 @@ public sealed class FixedDocumentRenderer(IPrintTextMeasurer? textMeasurer = nul
 
     private static StackPanel CreateOccurrenceBlock(
         PrintOccurrenceModel occurrence,
-        MonthPrintPlan plan)
+        MonthPrintPlan plan,
+        int occurrenceIndex)
     {
         var options = plan.EffectiveOptions;
         var fontSize = MonthPrintLayoutEngine.PointsToDips(options.BodyFontSizePoints);
-        var panel = new StackPanel { Margin = new Thickness(0, plan.EventSpacing, 0, 0) };
+        var panel = new StackPanel();
+        panel.Children.Add(Text(occurrence.Title, fontSize, Brushes.Black, FontWeights.SemiBold));
         if (occurrence.TimeText.Length > 0)
         {
-            panel.Children.Add(Text(occurrence.TimeText, fontSize * 0.9, SecondaryBrush));
+            var time = Text(occurrence.TimeText, fontSize * 0.9, SecondaryBrush);
+            time.Margin = new Thickness(PrintLayoutMetrics.EventMetadataIndent(fontSize), 0, 0, 0);
+            panel.Children.Add(time);
         }
 
-        panel.Children.Add(Text(occurrence.Title, fontSize, Brushes.Black, FontWeights.SemiBold));
+        if (options.ShowLocations && occurrence.Location.Length > 0)
+        {
+            var location = Text(occurrence.Location, fontSize * 0.88, SecondaryBrush);
+            location.Margin = new Thickness(PrintLayoutMetrics.EventMetadataIndent(fontSize), 0, 0, 0);
+            panel.Children.Add(location);
+        }
+
         var description = string.Join(
             Environment.NewLine,
             occurrence.DescriptionLines.Take(options.DescriptionLineLimit));
         if (description.Length > 0)
         {
-            panel.Children.Add(Text(description, fontSize * 0.92, Brushes.Black));
-        }
-
-        if (options.ShowLocations && occurrence.Location.Length > 0)
-        {
             panel.Children.Add(Text(
-                occurrence.Location,
-                fontSize * 0.88,
-                SecondaryBrush,
+                description,
+                fontSize * 0.92,
+                Brushes.Black,
                 FontWeights.Normal,
                 FontStyles.Italic));
         }
 
-        return panel;
+        var hasDashedSeparator = occurrenceIndex > 0
+            && options.EventSeparation == EventSeparationStyle.DashedLine;
+        var container = new StackPanel
+        {
+            Margin = new Thickness(0, hasDashedSeparator ? 0 : plan.EventSpacing, 0, 0),
+        };
+        if (hasDashedSeparator)
+        {
+            container.Children.Add(new Line
+            {
+                X1 = 0,
+                X2 = 1,
+                Height = PrintLayoutMetrics.EventSeparatorThickness,
+                Margin = new Thickness(0, 0, 0, plan.EventSpacing - PrintLayoutMetrics.EventSeparatorThickness),
+                Stretch = Stretch.Fill,
+                Stroke = GridBrush,
+                StrokeDashArray = new DoubleCollection([
+                    PrintLayoutMetrics.EventSeparatorDashLength
+                        / PrintLayoutMetrics.EventSeparatorThickness,
+                    PrintLayoutMetrics.EventSeparatorGapLength
+                        / PrintLayoutMetrics.EventSeparatorThickness,
+                ]),
+                StrokeThickness = PrintLayoutMetrics.EventSeparatorThickness,
+            });
+        }
+
+        container.Children.Add(new Border
+        {
+            Background = options.EventSeparation == EventSeparationStyle.AlternatingShading
+                && occurrenceIndex % 2 == 1
+                    ? AlternatingEventBrush
+                    : Brushes.Transparent,
+            Child = panel,
+        });
+        return container;
     }
 
     private IEnumerable<FixedPage> CreateDetailsPages(MonthPrintPlan plan)
@@ -271,11 +315,12 @@ public sealed class FixedDocumentRenderer(IPrintTextMeasurer? textMeasurer = nul
             ? $"{occurrence.Date:MMMM d, yyyy}\n{occurrence.Title}"
             : $"{occurrence.Date:MMMM d, yyyy}\n{occurrence.Title} — {occurrence.TimeText}";
         var parts = new List<string> { heading };
-        parts.AddRange(occurrence.FullDescriptionLines);
         if (occurrence.Location.Length > 0)
         {
             parts.Add($"Location: {occurrence.Location}");
         }
+
+        parts.AddRange(occurrence.FullDescriptionLines);
 
         return string.Join(Environment.NewLine, parts);
     }

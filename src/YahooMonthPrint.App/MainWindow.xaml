@@ -305,20 +305,22 @@
                                                             </Grid.ColumnDefinitions>
                                                             <Border Grid.Column="0" Margin="0,0,5,0" Background="{Binding CalendarColor}" CornerRadius="2" />
                                                             <StackPanel Grid.Column="1">
+                                                                <TextBlock FontWeight="SemiBold" Text="{Binding Title}" TextWrapping="Wrap" />
                                                                 <TextBlock FontSize="10"
+                                                                           Margin="5,0,0,0"
                                                                            Foreground="#FF484D55"
                                                                            Style="{StaticResource CollapseWhenEmpty}"
                                                                            Text="{Binding TimeText}" />
-                                                                <TextBlock FontWeight="SemiBold" Text="{Binding Title}" TextWrapping="Wrap" />
-                                                                <TextBlock Foreground="#FF30343A"
-                                                                           Style="{StaticResource CollapseWhenEmpty}"
-                                                                           Text="{Binding DescriptionText}"
-                                                                           TextWrapping="Wrap" />
                                                                 <TextBlock FontSize="10"
-                                                                           FontStyle="Italic"
+                                                                           Margin="5,0,0,0"
                                                                            Foreground="#FF555B65"
                                                                            Style="{StaticResource CollapseWhenEmpty}"
                                                                            Text="{Binding Location}"
+                                                                           TextWrapping="Wrap" />
+                                                                <TextBlock FontStyle="Italic"
+                                                                           Foreground="#FF30343A"
+                                                                           Style="{StaticResource CollapseWhenEmpty}"
+                                                                           Text="{Binding DescriptionText}"
                                                                            TextWrapping="Wrap" />
                                                             </StackPanel>
                                                             <Button Grid.Column="2"

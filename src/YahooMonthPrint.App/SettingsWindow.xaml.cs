@@ -44,6 +44,7 @@ public partial class SettingsWindow : Window
         SelectComboItem(PaperSizeCombo, settings.PaperSize);
         SelectComboItem(OrientationCombo, settings.Orientation);
         SelectComboItem(OverflowPolicyCombo, settings.OverflowPolicy.ToString());
+        SelectComboItem(EventSeparationCombo, settings.EventSeparation.ToString());
         ShowLocationsCheckBox.IsChecked = settings.ShowLocations;
     }
 
@@ -161,6 +162,8 @@ public partial class SettingsWindow : Window
                     SelectedValue(DescriptionLinesCombo),
                     System.Globalization.CultureInfo.InvariantCulture),
                 ShowLocations = ShowLocationsCheckBox.IsChecked == true,
+                EventSeparation = Enum.Parse<EventSeparationStyle>(
+                    SelectedValue(EventSeparationCombo)),
                 PaperSize = SelectedValue(PaperSizeCombo),
                 Orientation = SelectedValue(OrientationCombo),
                 OverflowPolicy = Enum.Parse<PrintOverflowPolicy>(

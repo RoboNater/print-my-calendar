@@ -1,6 +1,8 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
+using System.Windows.Media;
+using System.Windows.Shapes;
 using YahooMonthPrint.Core;
 
 namespace YahooMonthPrint.Printing.Tests;
@@ -80,6 +82,110 @@ public sealed class MonthPrintingTests
         Assert.Equal(["All day", "Timed"], day.Occurrences.Select(item => item.Title));
         Assert.Equal(string.Empty, day.Occurrences[0].TimeText);
         Assert.Equal("9:00 AM", day.Occurrences[1].TimeText);
+    }
+
+    [Fact]
+    public void RendererUsesReadableFieldOrderTypographyAndDefaultDashedSeparator()
+    {
+        var model = MonthLayoutModelBuilder.Build(
+            new DateOnly(2026, 9, 1),
+            [
+                Occurrence("First", 14, 9, "First description", "Room 101"),
+                Occurrence("Second", 14, 10, "Second description", "Room 202"),
+            ],
+            new MonthPrintOptions { OverflowPolicy = PrintOverflowPolicy.PrintDetailsPages });
+        var plan = new MonthPrintLayoutEngine(new ConstantTextMeasurer(8)).CreatePlan(model);
+
+        var facts = RunSta(() =>
+        {
+            var page = new FixedDocumentRenderer().Render(plan).Document.Pages[0].Child;
+            var dayIndex = plan.Days.ToList().FindIndex(day =>
+                day.Day.Date == new DateOnly(2026, 9, 14));
+            var dayCell = page.Children.OfType<Border>().ElementAt(dayIndex);
+            var dayPanel = Assert.IsType<StackPanel>(dayCell.Child);
+            var eventBlocks = dayPanel.Children.Cast<UIElement>().Skip(1).Cast<StackPanel>().ToArray();
+            var firstContent = Assert.IsType<Border>(Assert.Single(eventBlocks[0].Children));
+            var text = Assert.IsType<StackPanel>(firstContent.Child).Children
+                .Cast<TextBlock>()
+                .ToArray();
+            var separator = Assert.IsType<Line>(eventBlocks[1].Children[0]);
+            return new EventRenderFacts(
+                text.Select(item => item.Text).ToArray(),
+                text.Select(item => item.FontWeight).ToArray(),
+                text.Select(item => item.FontStyle).ToArray(),
+                text.Select(item => item.Margin.Left).ToArray(),
+                separator.StrokeDashArray.ToArray());
+        });
+
+        Assert.Equal(["First", "9:00 AM", "Room 101", "First description"], facts.Text);
+        Assert.Equal(FontWeights.SemiBold, facts.Weights[0]);
+        Assert.All(facts.Weights.Skip(1), weight => Assert.Equal(FontWeights.Normal, weight));
+        Assert.Equal(FontStyles.Italic, facts.Styles[3]);
+        Assert.True(facts.LeftMargins[1] > 0);
+        Assert.True(facts.LeftMargins[2] > 0);
+        Assert.Equal(
+            PrintLayoutMetrics.EventSeparatorDashLength,
+            facts.DashPattern[0] * PrintLayoutMetrics.EventSeparatorThickness,
+            precision: 6);
+        Assert.Equal(
+            PrintLayoutMetrics.EventSeparatorGapLength,
+            facts.DashPattern[1] * PrintLayoutMetrics.EventSeparatorThickness,
+            precision: 6);
+    }
+
+    [Fact]
+    public void LayoutMeasuresMetadataWidthAndDescriptionStyleAsRendered()
+    {
+        var measurer = new RecordingTextMeasurer();
+        var options = new MonthPrintOptions
+        {
+            OverflowPolicy = PrintOverflowPolicy.PrintDetailsPages,
+        };
+        var model = MonthLayoutModelBuilder.Build(
+            new DateOnly(2026, 9, 1),
+            [Occurrence(
+                "Meeting",
+                14,
+                9,
+                description: "A description near a wrapping boundary",
+                location: "Conference Room B, Building 4")],
+            options);
+
+        _ = new MonthPrintLayoutEngine(measurer).CreatePlan(model);
+
+        var titleWidth = Assert.Single(measurer.Measurements, item => item.Text == "Meeting").Width;
+        var timeWidth = Assert.Single(measurer.Measurements, item => item.Text == "9:00 AM").Width;
+        var locationWidth = Assert.Single(
+            measurer.Measurements,
+            item => item.Text == "Conference Room B, Building 4").Width;
+        var expectedIndent = PrintLayoutMetrics.EventMetadataIndent(
+            options.BodyFontSizePoints * 96 / 72);
+        Assert.Equal(expectedIndent, titleWidth - timeWidth, precision: 6);
+        Assert.Equal(timeWidth, locationWidth, precision: 6);
+        Assert.True(Assert.Single(
+            measurer.Measurements,
+            item => item.Text == "A description near a wrapping boundary").Italic);
+    }
+
+    [Fact]
+    public void EventSeparationOptionsProduceDistinctLayouts()
+    {
+        var spacings = Enum.GetValues<EventSeparationStyle>().ToDictionary(style => style, style =>
+        {
+            var model = MonthLayoutModelBuilder.Build(
+                new DateOnly(2026, 9, 1),
+                [Occurrence("First", 14, 9), Occurrence("Second", 14, 10)],
+                new MonthPrintOptions
+                {
+                    DetailLevel = DetailLevel.TitlesOnly,
+                    EventSeparation = style,
+                });
+            return new MonthPrintLayoutEngine(new ConstantTextMeasurer(8)).CreatePlan(model).EventSpacing;
+        });
+
+        Assert.Equal(MonthPrintLayoutEngine.StandardEventSpacing, spacings[EventSeparationStyle.DashedLine]);
+        Assert.Equal(MonthPrintLayoutEngine.ExpandedEventSpacing, spacings[EventSeparationStyle.VerticalSpacing]);
+        Assert.Equal(MonthPrintLayoutEngine.StandardEventSpacing, spacings[EventSeparationStyle.AlternatingShading]);
     }
 
     [Fact]
@@ -305,27 +411,63 @@ public sealed class MonthPrintingTests
 
     private sealed class ConstantTextMeasurer(double height) : IPrintTextMeasurer
     {
-        public double MeasureHeight(string text, double width, double fontSizeDips, bool bold = false)
+        public double MeasureHeight(
+            string text,
+            double width,
+            double fontSizeDips,
+            bool bold = false,
+            bool italic = false)
         {
             _ = width;
             _ = fontSizeDips;
             _ = bold;
+            _ = italic;
             return string.IsNullOrEmpty(text) ? 0 : height;
         }
     }
 
     private sealed class LineCountingTextMeasurer(double lineHeight) : IPrintTextMeasurer
     {
-        public double MeasureHeight(string text, double width, double fontSizeDips, bool bold = false)
+        public double MeasureHeight(
+            string text,
+            double width,
+            double fontSizeDips,
+            bool bold = false,
+            bool italic = false)
         {
             _ = width;
             _ = fontSizeDips;
             _ = bold;
+            _ = italic;
             return string.IsNullOrEmpty(text)
                 ? 0
                 : text.Count(character => character == '\n') * lineHeight + lineHeight;
         }
     }
+
+    private sealed class RecordingTextMeasurer : IPrintTextMeasurer
+    {
+        public List<Measurement> Measurements { get; } = [];
+
+        public double MeasureHeight(
+            string text,
+            double width,
+            double fontSizeDips,
+            bool bold = false,
+            bool italic = false)
+        {
+            _ = fontSizeDips;
+            _ = bold;
+            if (!string.IsNullOrEmpty(text))
+            {
+                Measurements.Add(new Measurement(text, width, italic));
+            }
+
+            return string.IsNullOrEmpty(text) ? 0 : 8;
+        }
+    }
+
+    private sealed record Measurement(string Text, double Width, bool Italic);
 
     private sealed record RenderFacts(
         int PageCount,
@@ -338,4 +480,11 @@ public sealed class MonthPrintingTests
         int PageCount,
         int OverfullCells,
         int DetailsPastBottomMargin);
+
+    private sealed record EventRenderFacts(
+        IReadOnlyList<string> Text,
+        IReadOnlyList<FontWeight> Weights,
+        IReadOnlyList<FontStyle> Styles,
+        IReadOnlyList<double> LeftMargins,
+        IReadOnlyList<double> DashPattern);
 }

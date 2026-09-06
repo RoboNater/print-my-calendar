@@ -7,12 +7,22 @@ namespace YahooMonthPrint.Printing;
 
 public interface IPrintTextMeasurer
 {
-    double MeasureHeight(string text, double width, double fontSizeDips, bool bold = false);
+    double MeasureHeight(
+        string text,
+        double width,
+        double fontSizeDips,
+        bool bold = false,
+        bool italic = false);
 }
 
 public sealed class WpfPrintTextMeasurer : IPrintTextMeasurer
 {
-    public double MeasureHeight(string text, double width, double fontSizeDips, bool bold = false)
+    public double MeasureHeight(
+        string text,
+        double width,
+        double fontSizeDips,
+        bool bold = false,
+        bool italic = false)
     {
         if (string.IsNullOrEmpty(text))
         {
@@ -25,6 +35,7 @@ public sealed class WpfPrintTextMeasurer : IPrintTextMeasurer
             FontFamily = new FontFamily("Segoe UI"),
             FontSize = fontSizeDips,
             FontWeight = bold ? FontWeights.SemiBold : FontWeights.Normal,
+            FontStyle = italic ? FontStyles.Italic : FontStyles.Normal,
             Foreground = Brushes.Black,
             TextWrapping = TextWrapping.Wrap,
             LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
@@ -39,6 +50,7 @@ public sealed class MonthPrintLayoutEngine(IPrintTextMeasurer? textMeasurer = nu
 {
     public const double MinimumBodyFontSizePoints = 7;
     public const double StandardEventSpacing = 4;
+    public const double ExpandedEventSpacing = 8;
     public const double TightEventSpacing = 1;
 
     private readonly IPrintTextMeasurer textMeasurer = textMeasurer ?? new WpfPrintTextMeasurer();
@@ -49,7 +61,7 @@ public sealed class MonthPrintLayoutEngine(IPrintTextMeasurer? textMeasurer = nu
         model.RequestedOptions.Validate();
 
         var options = model.RequestedOptions;
-        var spacing = StandardEventSpacing;
+        var spacing = InitialSpacing(options);
         var diagnostics = new List<PrintLayoutDiagnostic>();
 
         if (Fits(model, options, spacing))
@@ -128,7 +140,7 @@ public sealed class MonthPrintLayoutEngine(IPrintTextMeasurer? textMeasurer = nu
         if (model.RequestedOptions.OverflowPolicy == PrintOverflowPolicy.ReduceDetailAutomatically)
         {
             options = model.RequestedOptions;
-            spacing = StandardEventSpacing;
+            spacing = InitialSpacing(options);
             diagnostics.Clear();
         }
 
@@ -157,6 +169,11 @@ public sealed class MonthPrintLayoutEngine(IPrintTextMeasurer? textMeasurer = nu
     private static PrintLayoutDiagnostic FontReduction(double fontSizePoints) => new(
         PrintReductionStep.ReduceFontSize,
         $"Body text was reduced to {fontSizePoints:0.#} pt.");
+
+    private static double InitialSpacing(MonthPrintOptions options) =>
+        options.EventSeparation == EventSeparationStyle.VerticalSpacing
+            ? ExpandedEventSpacing
+            : StandardEventSpacing;
 
     private MonthPrintPlan OverflowPlan(
         MonthLayoutModel model,
@@ -223,16 +240,24 @@ public sealed class MonthPrintLayoutEngine(IPrintTextMeasurer? textMeasurer = nu
         double width)
     {
         var fontSize = PointsToDips(options.BodyFontSizePoints);
-        var height = textMeasurer.MeasureHeight(occurrence.TimeText, width, fontSize * 0.9);
-        height += textMeasurer.MeasureHeight(occurrence.Title, width, fontSize, bold: true);
+        var metadataWidth = Math.Max(
+            1,
+            width - PrintLayoutMetrics.EventMetadataIndent(fontSize));
+        var height = textMeasurer.MeasureHeight(occurrence.Title, width, fontSize, bold: true);
+        height += textMeasurer.MeasureHeight(occurrence.TimeText, metadataWidth, fontSize * 0.9);
+        if (options.ShowLocations)
+        {
+            height += textMeasurer.MeasureHeight(occurrence.Location, metadataWidth, fontSize * 0.88);
+        }
+
         var description = string.Join(
             Environment.NewLine,
             occurrence.DescriptionLines.Take(options.DescriptionLineLimit));
-        height += textMeasurer.MeasureHeight(description, width, fontSize * 0.92);
-        if (options.ShowLocations)
-        {
-            height += textMeasurer.MeasureHeight(occurrence.Location, width, fontSize * 0.88);
-        }
+        height += textMeasurer.MeasureHeight(
+            description,
+            width,
+            fontSize * 0.92,
+            italic: true);
 
         return Math.Ceiling(height);
     }

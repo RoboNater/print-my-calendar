@@ -21,6 +21,9 @@ public sealed record ApplicationSettings
 
     public bool ShowLocations { get; init; } = true;
 
+    [JsonConverter(typeof(EventSeparationStyleJsonConverter))]
+    public EventSeparationStyle EventSeparation { get; init; } = EventSeparationStyle.DashedLine;
+
     public string PaperSize { get; init; } = "Printer default";
 
     public string Orientation { get; init; } = "Landscape";
@@ -28,6 +31,47 @@ public sealed record ApplicationSettings
     [JsonConverter(typeof(PrintOverflowPolicyJsonConverter))]
     public PrintOverflowPolicy OverflowPolicy { get; init; } =
         PrintOverflowPolicy.ReduceDetailAutomatically;
+}
+
+public sealed class EventSeparationStyleJsonConverter : JsonConverter<EventSeparationStyle>
+{
+    public override EventSeparationStyle Read(
+        ref Utf8JsonReader reader,
+        Type typeToConvert,
+        JsonSerializerOptions options)
+    {
+        _ = typeToConvert;
+        _ = options;
+        if (reader.TokenType == JsonTokenType.Number
+            && reader.TryGetInt32(out var numericValue)
+            && Enum.IsDefined(typeof(EventSeparationStyle), numericValue))
+        {
+            return (EventSeparationStyle)numericValue;
+        }
+
+        if (reader.TokenType == JsonTokenType.String
+            && Enum.TryParse<EventSeparationStyle>(reader.GetString(), out var value)
+            && Enum.IsDefined(value))
+        {
+            return value;
+        }
+
+        if (reader.TokenType is not JsonTokenType.String and not JsonTokenType.Number)
+        {
+            reader.Skip();
+        }
+
+        return EventSeparationStyle.DashedLine;
+    }
+
+    public override void Write(
+        Utf8JsonWriter writer,
+        EventSeparationStyle value,
+        JsonSerializerOptions options)
+    {
+        _ = options;
+        writer.WriteStringValue(value.ToString());
+    }
 }
 
 public sealed class PrintOverflowPolicyJsonConverter : JsonConverter<PrintOverflowPolicy>
