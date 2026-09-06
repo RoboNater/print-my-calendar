@@ -28,6 +28,7 @@ public sealed class PersistenceServicesTests : IDisposable
 
         Assert.Equal(settings.YahooAccount, loaded.YahooAccount);
         Assert.Equal(settings.MaximumDescriptionLines, loaded.MaximumDescriptionLines);
+        Assert.Equal(settings.EventSeparation, loaded.EventSeparation);
         Assert.Equal(settings.Calendars, loaded.Calendars);
         Assert.DoesNotContain(Secret, json, StringComparison.Ordinal);
         Assert.DoesNotContain("password", json, StringComparison.OrdinalIgnoreCase);
@@ -325,6 +326,7 @@ public sealed class PersistenceServicesTests : IDisposable
                 true),
         ],
         MaximumDescriptionLines = 4,
+        EventSeparation = EventSeparationStyle.AlternatingShading,
     };
 
     private static CalendarOccurrence CreateOccurrence()

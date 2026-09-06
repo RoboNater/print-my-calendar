@@ -1,6 +1,8 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
+using System.Windows.Media;
+using System.Windows.Shapes;
 using YahooMonthPrint.Core;
 
 namespace YahooMonthPrint.Printing.Tests;
@@ -80,6 +82,69 @@ public sealed class MonthPrintingTests
         Assert.Equal(["All day", "Timed"], day.Occurrences.Select(item => item.Title));
         Assert.Equal(string.Empty, day.Occurrences[0].TimeText);
         Assert.Equal("9:00 AM", day.Occurrences[1].TimeText);
+    }
+
+    [Fact]
+    public void RendererUsesReadableFieldOrderTypographyAndDefaultDashedSeparator()
+    {
+        var model = MonthLayoutModelBuilder.Build(
+            new DateOnly(2026, 9, 1),
+            [
+                Occurrence("First", 14, 9, "First description", "Room 101"),
+                Occurrence("Second", 14, 10, "Second description", "Room 202"),
+            ],
+            new MonthPrintOptions { OverflowPolicy = PrintOverflowPolicy.PrintDetailsPages });
+        var plan = new MonthPrintLayoutEngine(new ConstantTextMeasurer(8)).CreatePlan(model);
+
+        var facts = RunSta(() =>
+        {
+            var page = new FixedDocumentRenderer().Render(plan).Document.Pages[0].Child;
+            var dayIndex = plan.Days.ToList().FindIndex(day =>
+                day.Day.Date == new DateOnly(2026, 9, 14));
+            var dayCell = page.Children.OfType<Border>().ElementAt(dayIndex);
+            var dayPanel = Assert.IsType<StackPanel>(dayCell.Child);
+            var eventBlocks = dayPanel.Children.Cast<UIElement>().Skip(1).Cast<StackPanel>().ToArray();
+            var firstContent = Assert.IsType<Border>(Assert.Single(eventBlocks[0].Children));
+            var text = Assert.IsType<StackPanel>(firstContent.Child).Children
+                .Cast<TextBlock>()
+                .ToArray();
+            var separator = Assert.IsType<Line>(eventBlocks[1].Children[0]);
+            return new EventRenderFacts(
+                text.Select(item => item.Text).ToArray(),
+                text.Select(item => item.FontWeight).ToArray(),
+                text.Select(item => item.FontStyle).ToArray(),
+                text.Select(item => item.Margin.Left).ToArray(),
+                separator.StrokeDashArray.ToArray());
+        });
+
+        Assert.Equal(["First", "9:00 AM", "Room 101", "First description"], facts.Text);
+        Assert.Equal(FontWeights.SemiBold, facts.Weights[0]);
+        Assert.All(facts.Weights.Skip(1), weight => Assert.Equal(FontWeights.Normal, weight));
+        Assert.Equal(FontStyles.Italic, facts.Styles[3]);
+        Assert.True(facts.LeftMargins[1] > 0);
+        Assert.True(facts.LeftMargins[2] > 0);
+        Assert.Equal([3, 2], facts.DashPattern);
+    }
+
+    [Fact]
+    public void EventSeparationOptionsProduceDistinctLayouts()
+    {
+        var spacings = Enum.GetValues<EventSeparationStyle>().ToDictionary(style => style, style =>
+        {
+            var model = MonthLayoutModelBuilder.Build(
+                new DateOnly(2026, 9, 1),
+                [Occurrence("First", 14, 9), Occurrence("Second", 14, 10)],
+                new MonthPrintOptions
+                {
+                    DetailLevel = DetailLevel.TitlesOnly,
+                    EventSeparation = style,
+                });
+            return new MonthPrintLayoutEngine(new ConstantTextMeasurer(8)).CreatePlan(model).EventSpacing;
+        });
+
+        Assert.Equal(MonthPrintLayoutEngine.StandardEventSpacing, spacings[EventSeparationStyle.DashedLine]);
+        Assert.Equal(MonthPrintLayoutEngine.ExpandedEventSpacing, spacings[EventSeparationStyle.VerticalSpacing]);
+        Assert.Equal(MonthPrintLayoutEngine.StandardEventSpacing, spacings[EventSeparationStyle.AlternatingShading]);
     }
 
     [Fact]
@@ -338,4 +403,11 @@ public sealed class MonthPrintingTests
         int PageCount,
         int OverfullCells,
         int DetailsPastBottomMargin);
+
+    private sealed record EventRenderFacts(
+        IReadOnlyList<string> Text,
+        IReadOnlyList<FontWeight> Weights,
+        IReadOnlyList<FontStyle> Styles,
+        IReadOnlyList<double> LeftMargins,
+        IReadOnlyList<double> DashPattern);
 }
