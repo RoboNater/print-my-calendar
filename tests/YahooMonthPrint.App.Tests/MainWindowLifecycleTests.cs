@@ -57,6 +57,32 @@ public sealed class MainWindowLifecycleTests
     }
 
     [Fact]
+    public void MainWindowClosesAndLogsWhenFlushFaults()
+    {
+        RunInSta(() =>
+        {
+            var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            tcs.SetException(new InvalidOperationException("Simulated flush failure"));
+            var source = new TestPendingChangesOccurrenceSource(tcs.Task);
+            var logger = new TrackingLogger();
+            using var viewModel = new MainWindowViewModel(source);
+            var window = new MainWindow(viewModel, logger: logger);
+            var closed = false;
+            window.Closed += (_, _) => closed = true;
+
+            window.Show();
+            window.Close();
+
+            PumpDispatcher(() => closed);
+
+            Assert.True(closed);
+            Assert.Contains(
+                logger.Entries,
+                entry => entry.Category == "settings" && entry.Status == "shutdown-flush-failed");
+        });
+    }
+
+    [Fact]
     public void SettingsSaveFlowReplacesMainWindowWithoutCrash()
     {
         RunInSta(() =>
@@ -197,22 +223,34 @@ public sealed class MainWindowLifecycleTests
         while ((condition is null || !condition()) && DateTime.UtcNow - start < TimeSpan.FromSeconds(2))
         {
             var frame = new DispatcherFrame();
-            Dispatcher.CurrentDispatcher.BeginInvoke(
-                DispatcherPriority.Background,
-                (DispatcherOperationCallback)(f =>
-                {
-                    ((DispatcherFrame)f).Continue = false;
-                    return null;
-                }),
-                frame);
+            var timer = new DispatcherTimer(DispatcherPriority.Background)
+            {
+                Interval = TimeSpan.FromMilliseconds(5),
+            };
+            timer.Tick += (_, _) =>
+            {
+                timer.Stop();
+                frame.Continue = false;
+            };
+            timer.Start();
             Dispatcher.PushFrame(frame);
             if (condition is null)
             {
                 break;
             }
-
-            Thread.Sleep(5);
         }
+    }
+
+    private sealed class TrackingLogger : IAppLogger
+    {
+        public List<(string Category, string Status, Exception? Exception)> Entries { get; } = [];
+
+        public void Log(
+            string category,
+            string status,
+            string? resourceId = null,
+            Exception? exception = null) =>
+            Entries.Add((category, status, exception));
     }
 
     private sealed class TestPendingChangesOccurrenceSource(Task flushTask)
