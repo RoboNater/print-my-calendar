@@ -131,18 +131,11 @@ public sealed class MainWindowLifecycleTests
 
             settingsWindow.Loaded += (_, _) =>
             {
-                // Switch to Print tab (Tab 3: "Printing")
-                var grid = Assert.IsType<Grid>(settingsWindow.Content);
-                var tabControl = Assert.IsType<TabControl>(grid.Children[0]);
-                tabControl.SelectedIndex = 3;
+                var printingTab = Assert.IsType<TabItem>(settingsWindow.FindName("PrintingTab"));
+                var tabControl = Assert.IsType<TabControl>(printingTab.Parent);
+                tabControl.SelectedItem = printingTab;
 
-                var selectedTab = Assert.IsType<TabItem>(tabControl.SelectedItem);
-                Assert.Equal("Printing", selectedTab.Header);
-
-                // Find and click the Save button
-                var buttonPanel = Assert.IsType<StackPanel>(grid.Children[1]);
-                var saveButton = buttonPanel.Children.OfType<Button>().Single(b => (string)b.Content == "Save");
-
+                var saveButton = Assert.IsType<Button>(settingsWindow.FindName("SaveButton"));
                 saveButton.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
             };
 
@@ -217,6 +210,8 @@ public sealed class MainWindowLifecycleTests
             {
                 break;
             }
+
+            Thread.Sleep(5);
         }
     }
 

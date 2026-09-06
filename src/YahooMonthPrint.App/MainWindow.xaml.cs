@@ -62,7 +62,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (flushTask.IsCompleted)
+        if (flushTask.IsCompletedSuccessfully)
         {
             return;
         }
@@ -90,7 +90,10 @@ public partial class MainWindow : Window
         {
             mayClose = true;
             closeIsPending = false;
-            _ = Dispatcher.InvokeAsync(Close);
+            if (!Dispatcher.HasShutdownStarted)
+            {
+                _ = Dispatcher.InvokeAsync(Close);
+            }
         }
     }
 
