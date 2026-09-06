@@ -159,14 +159,14 @@ public sealed class FixedDocumentRenderer(IPrintTextMeasurer? textMeasurer = nul
         if (occurrence.TimeText.Length > 0)
         {
             var time = Text(occurrence.TimeText, fontSize * 0.9, SecondaryBrush);
-            time.Margin = new Thickness(fontSize * 0.5, 0, 0, 0);
+            time.Margin = new Thickness(PrintLayoutMetrics.EventMetadataIndent(fontSize), 0, 0, 0);
             panel.Children.Add(time);
         }
 
         if (options.ShowLocations && occurrence.Location.Length > 0)
         {
             var location = Text(occurrence.Location, fontSize * 0.88, SecondaryBrush);
-            location.Margin = new Thickness(fontSize * 0.5, 0, 0, 0);
+            location.Margin = new Thickness(PrintLayoutMetrics.EventMetadataIndent(fontSize), 0, 0, 0);
             panel.Children.Add(location);
         }
 
@@ -199,7 +199,12 @@ public sealed class FixedDocumentRenderer(IPrintTextMeasurer? textMeasurer = nul
                 Margin = new Thickness(0, 0, 0, plan.EventSpacing - PrintLayoutMetrics.EventSeparatorThickness),
                 Stretch = Stretch.Fill,
                 Stroke = GridBrush,
-                StrokeDashArray = new DoubleCollection([3, 2]),
+                StrokeDashArray = new DoubleCollection([
+                    PrintLayoutMetrics.EventSeparatorDashLength
+                        / PrintLayoutMetrics.EventSeparatorThickness,
+                    PrintLayoutMetrics.EventSeparatorGapLength
+                        / PrintLayoutMetrics.EventSeparatorThickness,
+                ]),
                 StrokeThickness = PrintLayoutMetrics.EventSeparatorThickness,
             });
         }

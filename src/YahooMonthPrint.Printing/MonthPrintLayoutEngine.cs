@@ -229,11 +229,14 @@ public sealed class MonthPrintLayoutEngine(IPrintTextMeasurer? textMeasurer = nu
         double width)
     {
         var fontSize = PointsToDips(options.BodyFontSizePoints);
+        var metadataWidth = Math.Max(
+            1,
+            width - PrintLayoutMetrics.EventMetadataIndent(fontSize));
         var height = textMeasurer.MeasureHeight(occurrence.Title, width, fontSize, bold: true);
-        height += textMeasurer.MeasureHeight(occurrence.TimeText, width, fontSize * 0.9);
+        height += textMeasurer.MeasureHeight(occurrence.TimeText, metadataWidth, fontSize * 0.9);
         if (options.ShowLocations)
         {
-            height += textMeasurer.MeasureHeight(occurrence.Location, width, fontSize * 0.88);
+            height += textMeasurer.MeasureHeight(occurrence.Location, metadataWidth, fontSize * 0.88);
         }
 
         var description = string.Join(

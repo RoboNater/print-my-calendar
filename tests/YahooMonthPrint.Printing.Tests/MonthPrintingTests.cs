@@ -123,7 +123,40 @@ public sealed class MonthPrintingTests
         Assert.Equal(FontStyles.Italic, facts.Styles[3]);
         Assert.True(facts.LeftMargins[1] > 0);
         Assert.True(facts.LeftMargins[2] > 0);
-        Assert.Equal([3, 2], facts.DashPattern);
+        Assert.Equal(
+            PrintLayoutMetrics.EventSeparatorDashLength,
+            facts.DashPattern[0] * PrintLayoutMetrics.EventSeparatorThickness,
+            precision: 6);
+        Assert.Equal(
+            PrintLayoutMetrics.EventSeparatorGapLength,
+            facts.DashPattern[1] * PrintLayoutMetrics.EventSeparatorThickness,
+            precision: 6);
+    }
+
+    [Fact]
+    public void LayoutMeasuresIndentedMetadataAtItsRenderedWidth()
+    {
+        var measurer = new RecordingTextMeasurer();
+        var options = new MonthPrintOptions
+        {
+            OverflowPolicy = PrintOverflowPolicy.PrintDetailsPages,
+        };
+        var model = MonthLayoutModelBuilder.Build(
+            new DateOnly(2026, 9, 1),
+            [Occurrence("Meeting", 14, 9, location: "Conference Room B, Building 4")],
+            options);
+
+        _ = new MonthPrintLayoutEngine(measurer).CreatePlan(model);
+
+        var titleWidth = Assert.Single(measurer.Measurements, item => item.Text == "Meeting").Width;
+        var timeWidth = Assert.Single(measurer.Measurements, item => item.Text == "9:00 AM").Width;
+        var locationWidth = Assert.Single(
+            measurer.Measurements,
+            item => item.Text == "Conference Room B, Building 4").Width;
+        var expectedIndent = PrintLayoutMetrics.EventMetadataIndent(
+            options.BodyFontSizePoints * 96 / 72);
+        Assert.Equal(expectedIndent, titleWidth - timeWidth, precision: 6);
+        Assert.Equal(timeWidth, locationWidth, precision: 6);
     }
 
     [Fact]
@@ -391,6 +424,25 @@ public sealed class MonthPrintingTests
                 : text.Count(character => character == '\n') * lineHeight + lineHeight;
         }
     }
+
+    private sealed class RecordingTextMeasurer : IPrintTextMeasurer
+    {
+        public List<Measurement> Measurements { get; } = [];
+
+        public double MeasureHeight(string text, double width, double fontSizeDips, bool bold = false)
+        {
+            _ = fontSizeDips;
+            _ = bold;
+            if (!string.IsNullOrEmpty(text))
+            {
+                Measurements.Add(new Measurement(text, width));
+            }
+
+            return string.IsNullOrEmpty(text) ? 0 : 8;
+        }
+    }
+
+    private sealed record Measurement(string Text, double Width);
 
     private sealed record RenderFacts(
         int PageCount,
