@@ -134,7 +134,7 @@ public sealed class MonthPrintingTests
     }
 
     [Fact]
-    public void LayoutMeasuresIndentedMetadataAtItsRenderedWidth()
+    public void LayoutMeasuresMetadataWidthAndDescriptionStyleAsRendered()
     {
         var measurer = new RecordingTextMeasurer();
         var options = new MonthPrintOptions
@@ -143,7 +143,12 @@ public sealed class MonthPrintingTests
         };
         var model = MonthLayoutModelBuilder.Build(
             new DateOnly(2026, 9, 1),
-            [Occurrence("Meeting", 14, 9, location: "Conference Room B, Building 4")],
+            [Occurrence(
+                "Meeting",
+                14,
+                9,
+                description: "A description near a wrapping boundary",
+                location: "Conference Room B, Building 4")],
             options);
 
         _ = new MonthPrintLayoutEngine(measurer).CreatePlan(model);
@@ -157,6 +162,9 @@ public sealed class MonthPrintingTests
             options.BodyFontSizePoints * 96 / 72);
         Assert.Equal(expectedIndent, titleWidth - timeWidth, precision: 6);
         Assert.Equal(timeWidth, locationWidth, precision: 6);
+        Assert.True(Assert.Single(
+            measurer.Measurements,
+            item => item.Text == "A description near a wrapping boundary").Italic);
     }
 
     [Fact]
@@ -403,22 +411,34 @@ public sealed class MonthPrintingTests
 
     private sealed class ConstantTextMeasurer(double height) : IPrintTextMeasurer
     {
-        public double MeasureHeight(string text, double width, double fontSizeDips, bool bold = false)
+        public double MeasureHeight(
+            string text,
+            double width,
+            double fontSizeDips,
+            bool bold = false,
+            bool italic = false)
         {
             _ = width;
             _ = fontSizeDips;
             _ = bold;
+            _ = italic;
             return string.IsNullOrEmpty(text) ? 0 : height;
         }
     }
 
     private sealed class LineCountingTextMeasurer(double lineHeight) : IPrintTextMeasurer
     {
-        public double MeasureHeight(string text, double width, double fontSizeDips, bool bold = false)
+        public double MeasureHeight(
+            string text,
+            double width,
+            double fontSizeDips,
+            bool bold = false,
+            bool italic = false)
         {
             _ = width;
             _ = fontSizeDips;
             _ = bold;
+            _ = italic;
             return string.IsNullOrEmpty(text)
                 ? 0
                 : text.Count(character => character == '\n') * lineHeight + lineHeight;
@@ -429,20 +449,25 @@ public sealed class MonthPrintingTests
     {
         public List<Measurement> Measurements { get; } = [];
 
-        public double MeasureHeight(string text, double width, double fontSizeDips, bool bold = false)
+        public double MeasureHeight(
+            string text,
+            double width,
+            double fontSizeDips,
+            bool bold = false,
+            bool italic = false)
         {
             _ = fontSizeDips;
             _ = bold;
             if (!string.IsNullOrEmpty(text))
             {
-                Measurements.Add(new Measurement(text, width));
+                Measurements.Add(new Measurement(text, width, italic));
             }
 
             return string.IsNullOrEmpty(text) ? 0 : 8;
         }
     }
 
-    private sealed record Measurement(string Text, double Width);
+    private sealed record Measurement(string Text, double Width, bool Italic);
 
     private sealed record RenderFacts(
         int PageCount,

@@ -7,12 +7,22 @@ namespace YahooMonthPrint.Printing;
 
 public interface IPrintTextMeasurer
 {
-    double MeasureHeight(string text, double width, double fontSizeDips, bool bold = false);
+    double MeasureHeight(
+        string text,
+        double width,
+        double fontSizeDips,
+        bool bold = false,
+        bool italic = false);
 }
 
 public sealed class WpfPrintTextMeasurer : IPrintTextMeasurer
 {
-    public double MeasureHeight(string text, double width, double fontSizeDips, bool bold = false)
+    public double MeasureHeight(
+        string text,
+        double width,
+        double fontSizeDips,
+        bool bold = false,
+        bool italic = false)
     {
         if (string.IsNullOrEmpty(text))
         {
@@ -25,6 +35,7 @@ public sealed class WpfPrintTextMeasurer : IPrintTextMeasurer
             FontFamily = new FontFamily("Segoe UI"),
             FontSize = fontSizeDips,
             FontWeight = bold ? FontWeights.SemiBold : FontWeights.Normal,
+            FontStyle = italic ? FontStyles.Italic : FontStyles.Normal,
             Foreground = Brushes.Black,
             TextWrapping = TextWrapping.Wrap,
             LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
@@ -242,7 +253,11 @@ public sealed class MonthPrintLayoutEngine(IPrintTextMeasurer? textMeasurer = nu
         var description = string.Join(
             Environment.NewLine,
             occurrence.DescriptionLines.Take(options.DescriptionLineLimit));
-        height += textMeasurer.MeasureHeight(description, width, fontSize * 0.92);
+        height += textMeasurer.MeasureHeight(
+            description,
+            width,
+            fontSize * 0.92,
+            italic: true);
 
         return Math.Ceiling(height);
     }
