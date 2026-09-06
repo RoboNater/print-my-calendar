@@ -26,6 +26,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         Loaded += OnLoaded;
         Closing += OnClosing;
+        Closed += OnClosed;
     }
 
     public event EventHandler? SettingsRequested;
@@ -41,11 +42,28 @@ public partial class MainWindow : Window
         _ = InitializeAsync();
     }
 
+    private void OnClosed(object? sender, EventArgs e) => viewModel.Dispose();
+
     private async void OnClosing(object? sender, CancelEventArgs e)
     {
         if (mayClose)
         {
-            viewModel.Dispose();
+            return;
+        }
+
+        Task flushTask;
+        try
+        {
+            flushTask = viewModel.FlushPendingChangesAsync();
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            logger.Log("settings", "shutdown-flush-failed", exception: exception);
+            return;
+        }
+
+        if (flushTask.IsCompleted)
+        {
             return;
         }
 
@@ -58,7 +76,7 @@ public partial class MainWindow : Window
         closeIsPending = true;
         try
         {
-            await viewModel.FlushPendingChangesAsync().WaitAsync(TimeSpan.FromSeconds(10));
+            await flushTask.WaitAsync(TimeSpan.FromSeconds(10));
         }
         catch (TimeoutException exception)
         {
@@ -72,7 +90,7 @@ public partial class MainWindow : Window
         {
             mayClose = true;
             closeIsPending = false;
-            Close();
+            _ = Dispatcher.InvokeAsync(Close);
         }
     }
 

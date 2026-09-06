@@ -151,23 +151,51 @@ public partial class SettingsWindow : Window
 
         try
         {
+            var detailLevelValue = SelectedValue(DetailLevelCombo);
+            var detailLevel = Enum.TryParse<DetailLevel>(detailLevelValue, ignoreCase: true, out var parsedDetail)
+                ? parsedDetail
+                : settings.DetailLevel;
+
+            var linesValue = SelectedValue(DescriptionLinesCombo);
+            var descriptionLines = int.TryParse(linesValue, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var parsedLines)
+                ? parsedLines
+                : settings.MaximumDescriptionLines;
+
+            var separationValue = SelectedValue(EventSeparationCombo);
+            var eventSeparation = Enum.TryParse<EventSeparationStyle>(separationValue, ignoreCase: true, out var parsedSeparation)
+                ? parsedSeparation
+                : settings.EventSeparation;
+
+            var paperSize = SelectedValue(PaperSizeCombo);
+            if (string.IsNullOrWhiteSpace(paperSize))
+            {
+                paperSize = settings.PaperSize;
+            }
+
+            var orientation = SelectedValue(OrientationCombo);
+            if (string.IsNullOrWhiteSpace(orientation))
+            {
+                orientation = settings.Orientation;
+            }
+
+            var overflowValue = SelectedValue(OverflowPolicyCombo);
+            var overflowPolicy = Enum.TryParse<PrintOverflowPolicy>(overflowValue, ignoreCase: true, out var parsedOverflow)
+                ? parsedOverflow
+                : settings.OverflowPolicy;
+
             settings = settings with
             {
                 Calendars = calendars.Select(calendar => calendar.Value with
                 {
                     IsSelected = calendar.IsSelected,
                 }).ToArray(),
-                DetailLevel = Enum.Parse<DetailLevel>(SelectedValue(DetailLevelCombo)),
-                MaximumDescriptionLines = int.Parse(
-                    SelectedValue(DescriptionLinesCombo),
-                    System.Globalization.CultureInfo.InvariantCulture),
+                DetailLevel = detailLevel,
+                MaximumDescriptionLines = descriptionLines,
                 ShowLocations = ShowLocationsCheckBox.IsChecked == true,
-                EventSeparation = Enum.Parse<EventSeparationStyle>(
-                    SelectedValue(EventSeparationCombo)),
-                PaperSize = SelectedValue(PaperSizeCombo),
-                Orientation = SelectedValue(OrientationCombo),
-                OverflowPolicy = Enum.Parse<PrintOverflowPolicy>(
-                    SelectedValue(OverflowPolicyCombo)),
+                EventSeparation = eventSeparation,
+                PaperSize = paperSize,
+                Orientation = orientation,
+                OverflowPolicy = overflowPolicy,
             };
             await settingsStore.SaveAsync(settings, CancellationToken.None);
             DialogResult = true;
@@ -196,8 +224,9 @@ public partial class SettingsWindow : Window
 
     private static string SelectedValue(ComboBox comboBox)
     {
-        var selected = (ComboBoxItem)comboBox.SelectedItem;
-        return selected.Tag as string ?? selected.Content?.ToString() ?? string.Empty;
+        var selected = comboBox.SelectedItem as ComboBoxItem
+            ?? comboBox.Items.OfType<ComboBoxItem>().FirstOrDefault();
+        return selected?.Tag as string ?? selected?.Content?.ToString() ?? string.Empty;
     }
 }
 
