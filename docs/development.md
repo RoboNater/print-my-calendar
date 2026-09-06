@@ -42,7 +42,7 @@ From the repository root:
 ./eng/verify-tools.ps1 -BuildToolsOnly
 ```
 
-The default check validates required build, PR-delivery, and packaging tools and reports signing tools, printers, and Visual Studio as optional/manual capabilities. `-BuildToolsOnly` checks just Git, the selected .NET SDK, and Windows Desktop support; CI runs this mode so the documented entry point cannot silently rot.
+The default check validates required build, PR-delivery, and packaging tools and reports signing tools, printers, and Visual Studio as optional/manual capabilities. `-BuildToolsOnly` checks just PowerShell, Git, the selected .NET SDK, and Windows Desktop support; CI runs this mode so the documented entry point cannot silently rot.
 
 ## Restore, build, test, and publish
 
