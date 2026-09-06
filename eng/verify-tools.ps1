@@ -7,6 +7,13 @@ $ErrorActionPreference = 'Stop'
 $toolFailures = [System.Collections.Generic.List[string]]::new()
 . (Join-Path $PSScriptRoot 'InnoSetup.ps1')
 
+if ($PSVersionTable.PSVersion -lt [System.Version]'7.0') {
+    $toolFailures.Add("PowerShell 7 or newer is required (selected: $($PSVersionTable.PSVersion)).")
+}
+else {
+    Write-Host "[ok] PowerShell -> $($PSVersionTable.PSVersion)"
+}
+
 function Require-Command {
     param([Parameter(Mandatory)][string]$Name)
 

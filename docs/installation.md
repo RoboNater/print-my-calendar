@@ -54,4 +54,4 @@ The script restores locked dependencies, builds and tests the solution, publishe
 - `artifacts/installer/YahooMonthPrint-Setup.exe`
 - `artifacts/installer/YahooMonthPrint-Setup.exe.sha256`
 
-Pass `-SkipRestore`, `-SkipBuild`, or `-SkipTests` only when the corresponding work has already completed, as in CI; release candidates should otherwise run the default complete workflow. See [Build and release](release.md) for optional Authenticode signing and release validation.
+CI passes `-SkipRestore`, `-SkipBuild`, and `-SkipTests` because its separate validation steps already perform the locked restore, explicit solution build, and coverage test run. `-SkipBuild` omits that explicit solution build; `dotnet publish` still builds the versioned, runtime-specific application graph. Release candidates should otherwise run the default complete workflow. See [Build and release](release.md) for optional Authenticode signing and release validation.
