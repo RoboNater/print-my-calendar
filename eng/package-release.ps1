@@ -8,6 +8,8 @@ param(
 
     [string]$OutputDirectory = 'artifacts\installer',
 
+    [string]$InnoCompilerPath,
+
     [string]$SignToolPath,
 
     [ValidatePattern('^[0-9A-Fa-f]{40}$')]
@@ -22,9 +24,12 @@ $installerScript = Join-Path $repositoryRoot 'installer\YahooMonthPrint.iss'
 $resolvedPublishDirectory = (Resolve-Path -LiteralPath (Join-Path $repositoryRoot $PublishDirectory)).Path
 $resolvedOutputDirectory = [System.IO.Path]::GetFullPath((Join-Path $repositoryRoot $OutputDirectory))
 . (Join-Path $PSScriptRoot 'InnoSetup.ps1')
-$innoCompilerPath = Resolve-InnoCompiler
+if ([string]::IsNullOrWhiteSpace($InnoCompilerPath)) {
+    $InnoCompilerPath = Resolve-InnoCompiler
+}
 
-if ([string]::IsNullOrWhiteSpace($innoCompilerPath)) {
+if ([string]::IsNullOrWhiteSpace($InnoCompilerPath) -or
+    -not (Test-Path -LiteralPath $InnoCompilerPath -PathType Leaf)) {
     throw 'Inno Setup 6.3 or newer (ISCC.exe) was not found. Run eng/verify-tools.ps1 for setup guidance.'
 }
 
@@ -49,7 +54,7 @@ if ($signingRequested) {
 }
 
 New-Item -ItemType Directory -Force -Path $resolvedOutputDirectory | Out-Null
-& $innoCompilerPath '/Qp' "/DAppVersion=$Version" "/DPublishDir=$resolvedPublishDirectory" "/O$resolvedOutputDirectory" $installerScript
+& $InnoCompilerPath '/Qp' "/DAppVersion=$Version" "/DPublishDir=$resolvedPublishDirectory" "/O$resolvedOutputDirectory" $installerScript
 if ($LASTEXITCODE -ne 0) {
     throw "ISCC.exe failed with exit code $LASTEXITCODE."
 }
