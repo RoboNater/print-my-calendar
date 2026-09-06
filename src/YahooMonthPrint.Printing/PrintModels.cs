@@ -8,6 +8,7 @@ public static class PrintLayoutMetrics
     public const double WeekdayHeight = 22;
     public const double CellPadding = 5;
     public const double GridBorderThickness = 0.6;
+    public const double EventSeparatorThickness = 0.6;
     public const double DetailsSpacing = 9;
     public const double TextLineHeightMultiplier = 1.15;
 }
@@ -29,6 +30,13 @@ public enum PrintOverflowPolicy
     ReduceDetailAutomatically,
     UseSmallerText,
     PrintDetailsPages,
+}
+
+public enum EventSeparationStyle
+{
+    DashedLine,
+    VerticalSpacing,
+    AlternatingShading,
 }
 
 public enum PrintReductionStep
@@ -88,6 +96,8 @@ public sealed record MonthPrintOptions
     public int DescriptionLineLimit { get; init; } = 3;
 
     public bool ShowLocations { get; init; } = true;
+
+    public EventSeparationStyle EventSeparation { get; init; } = EventSeparationStyle.DashedLine;
 
     public double BodyFontSizePoints { get; init; } = 9;
 

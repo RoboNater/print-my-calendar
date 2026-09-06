@@ -47,6 +47,7 @@ public partial class PrintPreviewWindow : Window
             FontSizeCombo,
             options.BodyFontSizePoints.ToString("0", CultureInfo.InvariantCulture));
         ShowLocationsCheckBox.IsChecked = options.ShowLocations;
+        SelectTag(EventSeparationCombo, options.EventSeparation.ToString());
         AutomaticRadio.IsChecked = options.OverflowPolicy == PrintOverflowPolicy.ReduceDetailAutomatically;
         SmallerTextRadio.IsChecked = options.OverflowPolicy == PrintOverflowPolicy.UseSmallerText;
         DetailsPagesRadio.IsChecked = options.OverflowPolicy == PrintOverflowPolicy.PrintDetailsPages;
@@ -76,6 +77,7 @@ public partial class PrintPreviewWindow : Window
             DetailLevel = detailLevel,
             DescriptionLineLimit = descriptionLines,
             ShowLocations = showLocations,
+            EventSeparation = settings.EventSeparation,
             OverflowPolicy = settings.OverflowPolicy,
         };
     }
@@ -138,6 +140,7 @@ public partial class PrintPreviewWindow : Window
         var detail = Enum.Parse<DetailLevel>(SelectedTag(DetailCombo));
         var lines = int.Parse(SelectedTag(DescriptionLinesCombo), CultureInfo.InvariantCulture);
         var fontSize = double.Parse(SelectedTag(FontSizeCombo), CultureInfo.InvariantCulture);
+        var eventSeparation = Enum.Parse<EventSeparationStyle>(SelectedTag(EventSeparationCombo));
         var overflowPolicy = AutomaticRadio.IsChecked == true
             ? PrintOverflowPolicy.ReduceDetailAutomatically
             : SmallerTextRadio.IsChecked == true
@@ -160,6 +163,7 @@ public partial class PrintPreviewWindow : Window
             DescriptionLineLimit = lines,
             BodyFontSizePoints = fontSize,
             ShowLocations = ShowLocationsCheckBox.IsChecked == true,
+            EventSeparation = eventSeparation,
             OverflowPolicy = overflowPolicy,
         };
         RenderCurrentOptions();
