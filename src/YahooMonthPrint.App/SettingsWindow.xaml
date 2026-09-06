@@ -67,7 +67,7 @@
                 </StackPanel>
             </TabItem>
 
-            <TabItem Header="Printing">
+            <TabItem x:Name="PrintingTab" Header="Printing">
                 <StackPanel Margin="16">
                     <TextBlock Text="Paper size" />
                     <ComboBox x:Name="PaperSizeCombo" Width="220" Margin="0,5,0,14" HorizontalAlignment="Left">
@@ -104,7 +104,7 @@
 
         <StackPanel Grid.Row="1" Margin="0,14,0,0" HorizontalAlignment="Right" Orientation="Horizontal">
             <Button Width="90" MinHeight="34" Margin="0,0,8,0" IsCancel="True" Content="Cancel" />
-            <Button Width="90" MinHeight="34" Click="OnSave" IsDefault="True" Content="Save" />
+            <Button x:Name="SaveButton" Width="90" MinHeight="34" Click="OnSave" IsDefault="True" Content="Save" />
         </StackPanel>
     </Grid>
 </Window>
